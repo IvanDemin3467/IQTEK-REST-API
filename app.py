@@ -1,5 +1,5 @@
 from mysql.connector import connect, Error
-from flask import Flask, jsonify, render_template, request, url_for, flash, redirect
+from flask import Flask, jsonify, request
 from werkzeug.exceptions import abort
 
 OPTIONS_FILE_PATH = "options.txt"
@@ -9,6 +9,7 @@ DB_NAME = "sample_database"
 class ControllerRAM:
     def __init__(self, options):
         self.options = options
+        self.db = []
         print(self.init_db())
 
     def init_db(self):
@@ -47,11 +48,11 @@ class ControllerRAM:
         return -1
 
     def upd_user(self, user_id, title):
-        upd_user = {"id": user_id, "title": title}
+        new_user = {"id": user_id, "title": title}
         i = self.get_index(user_id)
         if i != -1:
-            self.db[i] = upd_user
-            return upd_user
+            self.db[i] = new_user
+            return new_user
         return -1
 
 
