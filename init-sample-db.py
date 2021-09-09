@@ -30,8 +30,7 @@ try:
             DROP TABLE IF EXISTS users;
             CREATE TABLE users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                title VARCHAR(100) NOT NULL,
-                description VARCHAR(255) NOT NULL);
+                title VARCHAR(100) NOT NULL);
             DESCRIBE users;
             INSERT INTO users (title, description)
                 VALUES ('Пётр Первый', 'Последний царь всея Руси');

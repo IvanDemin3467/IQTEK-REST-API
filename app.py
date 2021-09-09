@@ -1,6 +1,5 @@
 from mysql.connector import connect, Error
 from flask import Flask, jsonify, request
-from werkzeug.exceptions import abort
 
 OPTIONS_FILE_PATH = "options.txt"
 DB_NAME = "sample_database"
@@ -10,12 +9,10 @@ class ControllerRAM:
     def __init__(self, options):
         self.options = options
         self.db = []
-        print(self.init_db())
+        self.init_db()
 
     def init_db(self):
         self.db = []
-        self.add_user(1, "Pyotr Pervyj")
-        self.add_user(2, "Aleksandr Sergeevich Pushkin")
         return self.db
 
     def get_user(self, user_id):
@@ -26,12 +23,16 @@ class ControllerRAM:
 
     def get_users(self):
         result = self.db
-        return result
+        if len(result) != 0:
+            return result
+        return -1
 
     def add_user(self, user_id, title):
         new_user = {"id": user_id, "title": title}
-        self.db.append(new_user)
-        return new_user
+        if self.get_user(user_id) == -1:
+            self.db.append(new_user)
+            return 0
+        return -1
 
     def get_index(self, user_id):
         for i in range(len(self.db)):
@@ -44,7 +45,7 @@ class ControllerRAM:
         i = self.get_index(user_id)
         if i != -1:
             del self.db[i]
-            return 1
+            return 0
         return -1
 
     def upd_user(self, user_id, title):
@@ -52,13 +53,14 @@ class ControllerRAM:
         i = self.get_index(user_id)
         if i != -1:
             self.db[i] = new_user
-            return new_user
+            return 0
         return -1
 
 
-class ControllerDB():
+class ControllerDB:
     def __init__(self, options):
         self.options = options
+        self.init_db()
 
     def get_db_connection(self):
         try:
@@ -79,29 +81,45 @@ class ControllerDB():
             cursor.close()
         conn.commit()
         conn.close()
-        if result is None:
-            abort(404)
         return result
+
+    def init_db(self):
+        self.make_query(f"CREATE DATABASE IF NOT EXISTS {DB_NAME};")
+        self.make_query("DROP TABLE IF EXISTS users;")
+        self.make_query("""CREATE TABLE users (
+                           id INT PRIMARY KEY,
+                           title VARCHAR(255) NOT NULL);""")
+        return 0
 
     def get_user(self, user_id):
-        result = self.make_query(f'SELECT * FROM users WHERE id = {user_id}')[0]
-        return result
+        result = self.make_query(f"SELECT * FROM users WHERE id = {user_id}")
+        if len(result) == 0:
+            return -1
+        return result[0]
 
     def get_users(self):
-        result = self.make_query('SELECT * FROM users')
+        result = self.make_query("SELECT * FROM users")
+        if len(result) == 0:
+            return -1
         return result
 
-    def add_user(self, title, description):
-        result = self.make_query(f"INSERT INTO users (title, description) VALUES ('{title}', '{description}');")
-        return result
+    def add_user(self, user_id, title):
+        if self.get_user(user_id) == -1:
+            self.make_query(f"INSERT INTO users (id, title) VALUES ('{user_id}', '{title}');")
+            return 0
+        return -1
 
     def del_user(self, user_id):
+        if self.get_user(user_id) == -1:
+            return -1
         result = self.make_query(f"DELETE FROM users WHERE id = {user_id};")
         return result
 
-    def upd_user(self, user_id, title, description):
+    def upd_user(self, user_id, title):
+        if self.get_user(user_id) == -1:
+            return -1
         result = self.make_query(f"""UPDATE users 
-                                     SET title = '{title}', description = '{description}'  
+                                     SET title = '{title}'  
                                      WHERE id = '{user_id}'""")
         return result
 
@@ -118,34 +136,29 @@ class Repo:
         """
         It reads parameters from file at OPTIONS_FILE_PATH
         Input: se comments in options file
-        Output = dict of options
+        Output: dict of options
         """
 
-        options = {"use_db_repo": False, "use_ram_repo": False, "username": None, "password": None,
-                   "error": ""}
+        options = {"use_db_repo": False, "username": None, "password": None}
 
         try:
             s = open(OPTIONS_FILE_PATH, "rt", encoding="utf-8")
             stream = list(s)
             s.close()
         except:
-            options["error"] = "Got exception while reading options from file"
+            print("Got exception while reading options from file")
             return options
 
         for line in stream:
             if line.lstrip().startswith("#"):  # do not read comments
                 continue
-            line = line.rstrip("\n")
             # read content of string
+            line = line.rstrip("\n")
             fragments = line.split(":")
             # do we use db?
             if "use_db_repo" in fragments[0]:
                 if "True" in fragments[1]:
                     options["use_db_repo"] = True
-            # do we use db?
-            if "use_ram_repo" in fragments[0]:
-                if "True" in fragments[1]:
-                    options["use_ram_repo"] = True
             # username to connect to db
             elif "username" in fragments[0]:
                 options["username"] = fragments[1]
@@ -190,29 +203,40 @@ repo = Repo()
 @app.route('/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
     user = repo.get_user(user_id)
-    return jsonify(user)
+    if user == -1:
+        return "Rejected. No user with id=" + str(user_id), 404
+    return jsonify(user), 200
 
 @app.route('/users', methods=['GET'])
 def get_users():
     users = repo.get_users()
-    return jsonify(users)
+    if users == -1:
+        return "Rejected. DB is empty", 404
+    return jsonify(users), 200
 
 @app.route('/user/<int:user_id>', methods=['POST'])
 def add_user(user_id):
-    title = request.get_json()['title']
-    result = repo.add_user(user_id, title)
-    return '', 204
+    # title = request.get_json()['title']
+    title = request.args.get('title')
+    if repo.add_user(user_id, title) == -1:
+        return "Rejected. User with id=" + str(user_id) + " already exists", 422
+    return 'Success. User created', 204
 
 @app.route('/user/<int:user_id>', methods=['DELETE'])
 def del_user(user_id):
     result = repo.del_user(user_id)
-    return '', 204
+    if result == -1:
+        return "Rejected. No user with id=" + str(user_id), 404
+    return 'Success. User deleted', 204
 
-@app.route('/user/<int:user_id>', methods=['UPDATE'])
+@app.route('/user/<int:user_id>', methods=['PATCH'])
 def upd_user(user_id):
-    title = request.get_json()['title']
+    # title = request.get_json()['title']
+    title = request.args.get('title')
     result = repo.upd_user(user_id, title)
-    return '', 204
+    if result == -1:
+        return "Rejected. No user with id=" + str(user_id), 404
+    return 'Success. User updated', 204
 
 
 # @app.route('/create', methods=('GET', 'POST'))
@@ -257,6 +281,8 @@ def upd_user(user_id):
 
 if __name__ == '__main__':
     """
-    This is used when running locally only.
+    Тестовый запуск сервиса
     """
+    repo.add_user(1, "Pyotr Pervy")
+    repo.add_user(2, "Aleksandr Sergeevich Pushkin")
     app.run(host="127.0.0.1", port=80)
