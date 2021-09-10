@@ -18,8 +18,8 @@ class ControllerRAM:
         Формат базы: список словарей с данными пользователей
         :param options: словарь параметров. В данном контроллере не используется. Нет необходимости
         """
-        self.options = options  # Сохраняются параметры, переданные в конструктор
-        self.db = []  # Инициализируется база пользователей.
+        self.__options = options  # Сохраняются параметры, переданные в конструктор
+        self.__db = []  # Инициализируется база пользователей.
 
     def get_user(self, user_id):
         """
@@ -27,7 +27,7 @@ class ControllerRAM:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает -1
         """
-        for entry in self.db:
+        for entry in self.__db:
             if entry["id"] == user_id:
                 return entry
         return -1
@@ -37,7 +37,7 @@ class ControllerRAM:
         Возвращает всех пользователей в базе
         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает -1
         """
-        result = self.db
+        result = self.__db
         if len(result) != 0:
             return result
         return -1
@@ -51,7 +51,7 @@ class ControllerRAM:
         """
         new_user = {"id": user_id, "title": title}
         if self.get_user(user_id) == -1:
-            self.db.append(new_user)
+            self.__db.append(new_user)
             return 0
         return -1
 
@@ -62,8 +62,8 @@ class ControllerRAM:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь с таким id существует, то возвращает индекс, иначе возвращает -1
         """
-        for i in range(len(self.db)):
-            entry = self.db[i]
+        for i in range(len(self.__db)):
+            entry = self.__db[i]
             if entry["id"] == user_id:
                 return i
         return -1
@@ -76,7 +76,7 @@ class ControllerRAM:
         """
         i = self.get_index(user_id)
         if i != -1:
-            del self.db[i]
+            del self.__db[i]
             return 0
         return -1
 
@@ -90,7 +90,7 @@ class ControllerRAM:
         new_user = {"id": user_id, "title": title}
         i = self.get_index(user_id)
         if i != -1:
-            self.db[i] = new_user
+            self.__db[i] = new_user
             return 0
         return -1
 
@@ -109,21 +109,21 @@ class ControllerDB:
         :param options: словарь параметров. Загружается из файла. Для данного контроллера используются параметры
             username, password
         """
-        self.options = options
+        self.__options = options
         self.init_db()
 
     def get_db_connection(self):
         """
         Вспомогательная процедура для создания подключения к базе данных, расположенной на локальном компьютере.
-        В качестве параметров использует логин и пароль, хранимые в словаре options.
+        В качестве параметров использует логин и пароль, хранимые в словаре __options.
         В качестве имени базы использует значение глобальной константы DB_NAME
         :return: если подключение к базе успешно, то возвращает объект mysql.connector.connect, иначе возвращает -1
         """
         try:
             return connect(
                 host="localhost",
-                user=self.options["username"],
-                password=self.options["password"],
+                user=self.__options["username"],
+                password=self.__options["password"],
                 database=DB_NAME,
             )
         except Error as e:
@@ -243,11 +243,11 @@ class Repo:
         """
         Простая инициализация. Запускает получение настроек программы. Выбирает один из двух контроллеров
         """
-        self.options = self.get_options()
-        if self.options["use_db_repo"]:
-            self.controller = ControllerDB(self.options)
+        self.__options = self.get_options()
+        if self.__options["use_db_repo"]:
+            self.__controller = ControllerDB(self.__options)
         else:
-            self.controller = ControllerRAM(self.options)
+            self.__controller = ControllerRAM(self.__options)
 
     @staticmethod
     def get_options():
@@ -296,7 +296,7 @@ class Repo:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает -1
         """
-        result = self.controller.get_user(user_id)
+        result = self.__controller.get_user(user_id)
         return result
 
     def get_users(self):
@@ -304,7 +304,7 @@ class Repo:
         Передаёт управление контроллеру, а тот возвращает всех пользователей в базе
         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает -1
         """
-        result = self.controller.get_users()
+        result = self.__controller.get_users()
         return result
 
     def add_user(self, user_id, title):
@@ -314,7 +314,7 @@ class Repo:
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
-        result = self.controller.add_user(user_id, title)
+        result = self.__controller.add_user(user_id, title)
         return result
 
     def del_user(self, user_id):
@@ -323,7 +323,7 @@ class Repo:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
-        result = self.controller.del_user(user_id)
+        result = self.__controller.del_user(user_id)
         return result
 
     def upd_user(self, user_id, title):
@@ -333,7 +333,7 @@ class Repo:
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
-        result = self.controller.upd_user(user_id, title)
+        result = self.__controller.upd_user(user_id, title)
         return result
 
 
