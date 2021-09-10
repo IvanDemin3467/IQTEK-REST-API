@@ -1,5 +1,5 @@
 # Do we use DB? If "True" -> use db. Any other string -> use repo in RAM
-use_db_repo: False
+use_db_repo: True
 
 # Username to connect to db. Write username after colon ":". Avoid using special symbols, but they are allowed
 username:sampleusername
