@@ -130,10 +130,14 @@ class ControllerDB:
             print(e)
             return -1
 
-    def make_query(self, query):
+    def make_query(self, query, user_id=0, title=""):
         """
         Вспомогательная процедура для создания запросов к базе данных
+        Использует передачу именованных параметров для противостояния атакам SQL injection
+        Если при вызове программист передал небезопасный запрос, то исключения не возникает
         :param query: строка запроса к базе, отформатированная в соответствии со стандартами MySQL
+        :param user_id: целочисленное значение id пользователя для передачи в качестве именованного параметра в запрос
+        :param title: строковое значение ФИО пользователя для передачи в качестве именованного параметра в запрос
         :return: возвращает ответ от базы данных.
         Это может быть список словарей с данными пользователей в случае запроса SELECT,
         либо пустая строка в других случаях
@@ -142,7 +146,7 @@ class ControllerDB:
         try:
             conn = self.get_db_connection()  # Создать подключение
             with conn.cursor(dictionary=True) as cursor:  # параметр dictionary указывает, что курсор возвращает словари
-                cursor.execute(query)  # выполнить запрос
+                cursor.execute(query, {'user_id': user_id, 'title': title})  # выполнить запрос безопасным образом
                 result = cursor.fetchall()  # получить результаты выполнения
                 cursor.close()  # вручную закрыть курсор
             conn.commit()  # вручную указать, что транзакции завершены
@@ -160,7 +164,7 @@ class ControllerDB:
         self.make_query(
             f"CREATE DATABASE IF NOT EXISTS {DB_NAME};")  # создать базу с именем DB_NAME, если не существует
         # self.make_query("DROP TABLE IF EXISTS users;")  # не удаляем таблицу из предыдущих запусков
-        # создать таблицу.
+        # далее создать таблицу.
         # id: целочисленное без автоматического инкремента
         # title: строковое с максимальной длинной 255
         self.make_query("""CREATE TABLE IF NOT EXISTS users (
@@ -174,7 +178,7 @@ class ControllerDB:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает -1
         """
-        result = self.make_query(f"SELECT * FROM users WHERE id = {user_id}")
+        result = self.make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
         if len(result) == 0:
             return -1
         return result[0]
@@ -197,7 +201,8 @@ class ControllerDB:
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
         if self.get_user(user_id) == -1:
-            self.make_query(f"INSERT INTO users (id, title) VALUES ('{user_id}', '{title}');")
+            self.make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
+                            user_id=user_id, title=title)
             return 0
         return -1
 
@@ -208,7 +213,7 @@ class ControllerDB:
         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
         if self.get_user(user_id) != -1:
-            self.make_query(f"DELETE FROM users WHERE id = {user_id};")
+            self.make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
             return 0
         return -1
 
@@ -220,9 +225,8 @@ class ControllerDB:
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
         if self.get_user(user_id) != -1:
-            self.make_query(f"""UPDATE users 
-                                        SET title = '{title}'  
-                                        WHERE id = '{user_id}'""")
+            self.make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
+                            user_id=user_id, title=title)
             return 0
         return -1
 
