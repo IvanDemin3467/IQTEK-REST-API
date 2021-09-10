@@ -1,58 +1,61 @@
-from requests import post, get, patch, delete
+from requests import get, post, patch, delete
+
+URL = "http://localhost:80/"
+
 
 def show_all():
+    """
+    Simply gets all entries from service and prints status code (200 expected) and returned json
+    :return: None
+    """
     print("\nПолучить все записи")
-    result = get('http://localhost:80/users')
-    print(result.json())
+    result = get(URL + 'users')
+    print(result.status_code, result.text)
+
+
+def sample_test(message, resource, fun):
+    """
+    Creates REST API request to service located at URL address
+    :param message: a string to print before performing request (for user readability)
+    :param resource: a string indicating a resource located in the service that is being requested
+    :param fun: a function with which request is performed (get(), post(), patch() or delete() expected)
+    :return: None
+    """
+    print("\n" + message)
+    result = fun(URL + resource)
+    print(result.status_code, result.text)
+
 
 if __name__ == '__main__':
 
-    # Successfull
-
+    post(URL + "user/1?Pyotr%20Pervy")
+    post(URL + "user/2?Aleksandr%20Sergeevich%20Pushkin")
     show_all()
 
-    print("\nПолучить одну запись с id=2")
-    result = get('http://localhost:80/user/2')
-    print(result.json())
+    # Successful
 
-    print("\nСоздать пользователя с именем '; DROP TABLE IF EXISTS users; --")
-    result = post('http://localhost:80/user/3?title=%27%3B+DROP+TABLE+IF+EXISTS+users%3B+--')  # SQL injection
-    print(result.status_code)
+    sample_test("Получить одну запись с id=2", 'user/2', get)
 
+    sample_test("Создать пользователя с именем '; DROP TABLE IF EXISTS users; --",
+                "user/3?title=%27%3B+DROP+TABLE+IF+EXISTS+users%3B+--", post)  # SQL injection
     show_all()
 
-    print("\nИзменить запись с id=3")
-    result = patch('http://localhost:80/user/3?title=Mikhail%20Vasilevich%20Lomonosov')
-    print(result.status_code)
-
+    sample_test("Изменить запись с id=3", "user/3?title=Mikhail%20Vasilievich%20Lomonosov", patch)
     show_all()
 
-    print("\nУдалить запись с id=3")
-    result = delete('http://localhost:80/user/3')
-    print(result.status_code)
-
+    sample_test("Удалить запись с id=3", "user/3", delete)
     show_all()
 
     # Rejected
 
-    print("\nПолучить несуществующую запись запись с id=3")
-    result = get('http://localhost:80/user/3')
-    print(result.text)
+    sample_test("Получить несуществующую запись запись с id=3", "user/3", get)
 
-    print("\nСоздать пользователя с id, который уже существует в базе")
-    result = post('http://localhost:80/user/2?title=Test')
-    print(result.text)
+    sample_test("Создать пользователя с id, который уже существует в базе", "user/2?title=Test", post)
 
-    print("\nИзменить пользователя, которого не существует в базе")
-    result = patch('http://localhost:80/user/3?title=Test%20Title')
-    print(result.text)
+    sample_test("Изменить пользователя, которого не существует в базе", "user/3?title=Test%20Title", patch)
 
-    print("\nУдалить пользователя, которого не существует в базе")
-    result = delete('http://localhost:80/user/3')
-    print(result.text)
+    sample_test("Удалить пользователя, которого не существует в базе", "user/3", delete)
 
-    print("\nОтобразить пустую базу")
-    delete('http://localhost:80/user/2')  # delete all
-    delete('http://localhost:80/user/1')
-    result = get('http://localhost:80/users')
-    print(result.text)
+    delete(URL + 'user/2')  # delete all
+    delete(URL + 'user/1')
+    sample_test("Отобразить пустую базу", "users", get)
