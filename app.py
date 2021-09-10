@@ -55,7 +55,7 @@ class ControllerRAM:
             return 0
         return -1
 
-    def get_index(self, user_id):
+    def __get_index(self, user_id):
         """
         Вспомогательная процедура для поиска индекса пользователя по известному id.
         Нужна, так как база реализована в виде списка
@@ -74,7 +74,7 @@ class ControllerRAM:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
-        i = self.get_index(user_id)
+        i = self.__get_index(user_id)
         if i != -1:
             del self.__db[i]
             return 0
@@ -88,7 +88,7 @@ class ControllerRAM:
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
         new_user = {"id": user_id, "title": title}
-        i = self.get_index(user_id)
+        i = self.__get_index(user_id)
         if i != -1:
             self.__db[i] = new_user
             return 0
@@ -110,9 +110,9 @@ class ControllerDB:
             username, password
         """
         self.__options = options
-        self.init_db()
+        self.__init_db()
 
-    def get_db_connection(self):
+    def __get_db_connection(self):
         """
         Вспомогательная процедура для создания подключения к базе данных, расположенной на локальном компьютере.
         В качестве параметров использует логин и пароль, хранимые в словаре __options.
@@ -130,7 +130,7 @@ class ControllerDB:
             print(e)
             return -1
 
-    def make_query(self, query, user_id=0, title=""):
+    def __make_query(self, query, user_id=0, title=""):
         """
         Вспомогательная процедура для создания запросов к базе данных
         Использует передачу именованных параметров для противостояния атакам SQL injection
@@ -144,7 +144,7 @@ class ControllerDB:
         Если запрос к базе возвращает исключение, то данная процедура возвращает -1
         """
         try:
-            conn = self.get_db_connection()  # Создать подключение
+            conn = self.__get_db_connection()  # Создать подключение
             with conn.cursor(dictionary=True) as cursor:  # параметр dictionary указывает, что курсор возвращает словари
                 cursor.execute(query, {'user_id': user_id, 'title': title})  # выполнить запрос безопасным образом
                 result = cursor.fetchall()  # получить результаты выполнения
@@ -156,18 +156,18 @@ class ControllerDB:
             print(f"Error with db: {err}")
             return -1
 
-    def init_db(self):
+    def __init_db(self):
         """
         Инициализация базы данных
         :return: возвращает всегда 0, так как исключения обрабатываются в вызываемой процедуре
         """
-        self.make_query(
+        self.__make_query(
             f"CREATE DATABASE IF NOT EXISTS {DB_NAME};")  # создать базу с именем DB_NAME, если не существует
         # self.make_query("DROP TABLE IF EXISTS users;")  # не удаляем таблицу из предыдущих запусков
         # далее создать таблицу.
         # id: целочисленное без автоматического инкремента
         # title: строковое с максимальной длинной 255
-        self.make_query("""CREATE TABLE IF NOT EXISTS users (
+        self.__make_query("""CREATE TABLE IF NOT EXISTS users (
                            id INT PRIMARY KEY,
                            title VARCHAR(255) NOT NULL);""")
         return 0
@@ -178,7 +178,7 @@ class ControllerDB:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает -1
         """
-        result = self.make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
+        result = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
         if len(result) == 0:
             return -1
         return result[0]
@@ -188,7 +188,7 @@ class ControllerDB:
         Возвращает всех пользователей в базе
         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает -1
         """
-        result = self.make_query("SELECT * FROM users")
+        result = self.__make_query("SELECT * FROM users")
         if len(result) == 0:
             return -1
         return result
@@ -201,8 +201,8 @@ class ControllerDB:
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
         if self.get_user(user_id) == -1:
-            self.make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
-                            user_id=user_id, title=title)
+            self.__make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
+                              user_id=user_id, title=title)
             return 0
         return -1
 
@@ -213,7 +213,7 @@ class ControllerDB:
         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
         if self.get_user(user_id) != -1:
-            self.make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
+            self.__make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
             return 0
         return -1
 
@@ -225,8 +225,8 @@ class ControllerDB:
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
         if self.get_user(user_id) != -1:
-            self.make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
-                            user_id=user_id, title=title)
+            self.__make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
+                              user_id=user_id, title=title)
             return 0
         return -1
 
@@ -243,14 +243,14 @@ class Repo:
         """
         Простая инициализация. Запускает получение настроек программы. Выбирает один из двух контроллеров
         """
-        self.__options = self.get_options()
+        self.__options = self.__get_options()
         if self.__options["use_db_repo"]:
             self.__controller = ControllerDB(self.__options)
         else:
             self.__controller = ControllerRAM(self.__options)
 
     @staticmethod
-    def get_options():
+    def __get_options():
         """
         Вспомогательный статический метод.
         Считывает настройки программы из файла OPTIONS_FILE_PATH.
