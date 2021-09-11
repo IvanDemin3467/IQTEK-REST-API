@@ -130,3 +130,6 @@ dmypy.json
 
 
 /.idea/
+reading/01 The principle of sole responsibility.txt
+.gitignore
+/reading/

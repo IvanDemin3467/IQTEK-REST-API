@@ -8,6 +8,35 @@ OPTIONS_FILE_PATH = "options.txt"
 DB_NAME = "sample_database"
 
 
+class Entity:
+    def __init__(self, entity_id: int, title: str) -> None:
+        self.id = entity_id
+        self.title = title
+
+
+class AbstractRepository(ABC):
+
+    @abstractmethod
+    def add(self, entity: Entity):
+        raise NotImplementedError
+
+    @abstractmethod
+    def list(self) -> list[Entity]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get(self, reference) -> Entity:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete(self, reference) -> Entity:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update(self, reference) -> Entity:
+        raise NotImplementedError
+
+
 # Factory start
 
 class Creator(ABC):
@@ -115,7 +144,7 @@ if __name__ == "__main__":
 # Factory end
 
 
-class ControllerRAM:
+class ControllerRAM(AbstractRepository):
     """
     Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в оперативной памяти.
     Он может быть подключен к классу Repo в качестве одного из дух возможных контроллеров.
@@ -131,7 +160,7 @@ class ControllerRAM:
         self.__options = options  # Сохраняются параметры, переданные в конструктор
         self.__db = []  # Инициализируется база пользователей.
 
-    def get_user(self, user_id: int) -> dict:
+    def get(self, user_id: int) -> dict:
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
@@ -142,7 +171,7 @@ class ControllerRAM:
                 return entry
         return {}
 
-    def get_users(self) -> list:
+    def list(self) -> list:
         """
         Возвращает всех пользователей в базе
         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
@@ -152,15 +181,15 @@ class ControllerRAM:
             return result
         return []
 
-    def add_user(self, user_id: int, title: str) -> int:
+    def add(self, entity: Entity) -> int:
         """
         Добавляет нового пользователя в базу
         :param user_id: целочисленное значение id пользователя
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
-        new_user = {"id": user_id, "title": title}
-        if self.get_user(user_id) == {}:
+        new_user = {"id": entity.id, "title": entity.title}
+        if self.get(entity.id) == {}:
             self.__db.append(new_user)
             return 0
         return -1
@@ -178,7 +207,7 @@ class ControllerRAM:
                 return i
         return -1
 
-    def del_user(self, user_id: int) -> int:
+    def delete(self, user_id: int) -> int:
         """
         Удаляет одного пользователя из базы
         :param user_id: целочисленное значение id пользователя
@@ -190,22 +219,22 @@ class ControllerRAM:
             return 0
         return -1
 
-    def upd_user(self, user_id: int, title: str) -> int:
+    def update(self, entity: Entity) -> int:
         """
         Обновляет данные пользователя в соответствии с переданными параметрами
         :param user_id: целочисленное значение id пользователя
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
-        new_user = {"id": user_id, "title": title}
-        i = self.__get_index(user_id)
+        new_user = {"id": entity.id, "title": entity.title}
+        i = self.__get_index(entity.id)
         if i != -1:
             self.__db[i] = new_user
             return 0
         return -1
 
 
-class ControllerDB:
+class ControllerDB(AbstractRepository):
     """
     Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в базе данных.
     Работает с базами MySQL. Используется доступ по логину и паролю
@@ -282,7 +311,7 @@ class ControllerDB:
                            title VARCHAR(255) NOT NULL);""")
         return 0
 
-    def get_user(self, user_id: int) -> dict:
+    def get(self, user_id: int) -> dict:
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
@@ -293,7 +322,7 @@ class ControllerDB:
             return {}
         return result[0]
 
-    def get_users(self) -> list:
+    def list(self) -> list:
         """
         Возвращает всех пользователей в базе
         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
@@ -303,40 +332,40 @@ class ControllerDB:
             return []
         return result
 
-    def add_user(self, user_id: int, title: str):
+    def add(self, entity: Entity):
         """
         Добавляет нового пользователя в базу
         :param user_id: целочисленное значение id пользователя
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
-        if self.get_user(user_id) == {}:
+        if self.get(entity.id) == {}:
             self.__make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
-                              user_id=user_id, title=title)
+                              user_id=entity.id, title=entity.title)
             return 0
         return -1
 
-    def del_user(self, user_id: int):
+    def delete(self, user_id: int):
         """
         Удаляет одного пользователя из базы
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
-        if self.get_user(user_id) != {}:
+        if self.get(user_id) != {}:
             self.__make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
             return 0
         return -1
 
-    def upd_user(self, user_id: int, title: str):
+    def update(self, entity: Entity):
         """
         Обновляет данные пользователя в соответствии с переданными параметрами
         :param user_id: целочисленное значение id пользователя
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
-        if self.get_user(user_id) != {}:
+        if self.get(entity.id) != {}:
             self.__make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
-                              user_id=user_id, title=title)
+                              user_id=entity.id, title=entity.title)
             return 0
         return -1
 
@@ -406,7 +435,7 @@ class Repo:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
         """
-        result = self.__controller.get_user(user_id)
+        result = self.__controller.get(user_id)
         return result
 
     def get_users(self) -> list:
@@ -414,17 +443,17 @@ class Repo:
         Передаёт управление контроллеру, а тот возвращает всех пользователей в базе
         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
         """
-        result = self.__controller.get_users()
+        result = self.__controller.list()
         return result
 
-    def add_user(self, user_id: int, title: str) -> int:
+    def add_user(self, entity: Entity) -> int:
         """
         Передаёт управление контроллеру, а тот добавляет нового пользователя в базу
         :param user_id: целочисленное значение id пользователя
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
-        result = self.__controller.add_user(user_id, title)
+        result = self.__controller.add(entity)
         return result
 
     def del_user(self, user_id: int) -> int:
@@ -433,17 +462,17 @@ class Repo:
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
-        result = self.__controller.del_user(user_id)
+        result = self.__controller.delete(user_id)
         return result
 
-    def upd_user(self, user_id: int, title: str) -> int:
+    def upd_user(self, entity: Entity) -> int:
         """
         Передаёт управление контроллеру, а тот обновляет данные пользователя в соответствии с переданными параметрами
         :param user_id: целочисленное значение id пользователя
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
-        result = self.__controller.upd_user(user_id, title)
+        result = self.__controller.update(entity)
         return result
 
 
@@ -467,7 +496,7 @@ def get_user(user_id: int) -> (str, int):
              Формат возвращаемого значения: {"id": user_id, "title": title}
     """
     user = repo.get_user(user_id)
-    if user == {}:
+    if user is None:
         return "Rejected. No user with id=" + str(user_id), 404
     return jsonify(user), 200
 
@@ -481,10 +510,14 @@ def get_users() -> (str, int):
              иначе возвращает код 404
              Формат возвращаемого значения: [{"id": user_id1, "title": title1}, {"id": user_id2, "title": title2}]
     """
-    users = repo.get_users()
-    if not users:
+    result = repo.get_users()
+    if not result:
         return "Rejected. DB is empty", 404
-    return jsonify(users), 200
+    users = []
+    # for entity in result:
+    #     # entry = "id: " + str(entity.id) + ", title: " + str(entity.title)
+    #     users.append(entry)
+    return jsonify(result), 200
 
 
 @app.route('/user/<int:user_id>', methods=['POST'])
@@ -498,7 +531,8 @@ def add_user(user_id: int) -> (str, int):
              иначе создаёт и возвращает код 204
     """
     title = request.args.get('title')
-    if repo.add_user(user_id, title) == -1:
+    entity = Entity(user_id, title)
+    if repo.add_user(entity) == -1:
         return "Rejected. User with id=" + str(user_id) + " already exists", 422
     return 'Success. User created', 204
 
@@ -528,7 +562,8 @@ def upd_user(user_id: int) -> (str, int):
              иначе изменяет его данные и возвращает код 204
     """
     title = request.args.get('title')
-    result = repo.upd_user(user_id, title)
+    entity = Entity(user_id, title)
+    result = repo.upd_user(entity)
     if result == -1:
         return "Rejected. No user with id=" + str(user_id), 404
     return 'Success. User updated', 204
@@ -539,6 +574,4 @@ if __name__ == '__main__':
     Тестовый запуск сервиса. Активируется только при непосредственном запуске приложения.
     При запуске через WSGI-сервер этот блок игнорируется
     """
-    repo.add_user(1, "Pyotr Pervy")
-    repo.add_user(2, "Aleksandr Sergeevich Pushkin")
     app.run(host="127.0.0.1", port=80)
