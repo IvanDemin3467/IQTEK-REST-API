@@ -12,7 +12,7 @@ class ControllerRAM:
     Другая возможность - использовать контроллер ControllerDB
     """
 
-    def __init__(self, options):
+    def __init__(self, options: dict):
         """
         Простая инициализация
         Формат базы: список словарей с данными пользователей
@@ -21,28 +21,28 @@ class ControllerRAM:
         self.__options = options  # Сохраняются параметры, переданные в конструктор
         self.__db = []  # Инициализируется база пользователей.
 
-    def get_user(self, user_id):
+    def get_user(self, user_id: int) -> dict:
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает -1
+        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
         """
         for entry in self.__db:
             if entry["id"] == user_id:
                 return entry
-        return -1
+        return {}
 
-    def get_users(self):
+    def get_users(self) -> list:
         """
         Возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает -1
+        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
         """
         result = self.__db
         if len(result) != 0:
             return result
-        return -1
+        return []
 
-    def add_user(self, user_id, title):
+    def add_user(self, user_id: int, title: str) -> int:
         """
         Добавляет нового пользователя в базу
         :param user_id: целочисленное значение id пользователя
@@ -50,12 +50,12 @@ class ControllerRAM:
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
         new_user = {"id": user_id, "title": title}
-        if self.get_user(user_id) == -1:
+        if self.get_user(user_id) == {}:
             self.__db.append(new_user)
             return 0
         return -1
 
-    def __get_index(self, user_id):
+    def __get_index(self, user_id: int) -> int:
         """
         Вспомогательная процедура для поиска индекса пользователя по известному id.
         Нужна, так как база реализована в виде списка
@@ -68,7 +68,7 @@ class ControllerRAM:
                 return i
         return -1
 
-    def del_user(self, user_id):
+    def del_user(self, user_id: int) -> int:
         """
         Удаляет одного пользователя из базы
         :param user_id: целочисленное значение id пользователя
@@ -80,7 +80,7 @@ class ControllerRAM:
             return 0
         return -1
 
-    def upd_user(self, user_id, title):
+    def upd_user(self, user_id: int, title: str) -> int:
         """
         Обновляет данные пользователя в соответствии с переданными параметрами
         :param user_id: целочисленное значение id пользователя
@@ -103,7 +103,7 @@ class ControllerDB:
     Другая возможность - использовать контроллер ControllerRAM.
     """
 
-    def __init__(self, options):
+    def __init__(self, options: dict):
         """
         Простая инициализация
         :param options: словарь параметров. Загружается из файла. Для данного контроллера используются параметры
@@ -117,7 +117,7 @@ class ControllerDB:
         Вспомогательная процедура для создания подключения к базе данных, расположенной на локальном компьютере.
         В качестве параметров использует логин и пароль, хранимые в словаре __options.
         В качестве имени базы использует значение глобальной константы DB_NAME
-        :return: если подключение к базе успешно, то возвращает объект mysql.connector.connect, иначе возвращает -1
+        :return: если подключение к базе успешно, то возвращает объект mysql.connector.connect, иначе возвращает None
         """
         try:
             return connect(
@@ -128,9 +128,9 @@ class ControllerDB:
             )
         except Error as e:
             print(e)
-            return -1
+            return None
 
-    def __make_query(self, query, user_id=0, title=""):
+    def __make_query(self, query: str, user_id=0, title="") -> list:
         """
         Вспомогательная процедура для создания запросов к базе данных
         Использует передачу именованных параметров для противостояния атакам SQL injection
@@ -141,7 +141,7 @@ class ControllerDB:
         :return: возвращает ответ от базы данных.
         Это может быть список словарей с данными пользователей в случае запроса SELECT,
         либо пустая строка в других случаях
-        Если запрос к базе возвращает исключение, то данная процедура возвращает -1
+        Если запрос к базе возвращает исключение, то данная процедура возвращает []
         """
         try:
             conn = self.__get_db_connection()  # Создать подключение
@@ -154,9 +154,9 @@ class ControllerDB:
             return result
         except Error as err:
             print(f"Error with db: {err}")
-            return -1
+            return []
 
-    def __init_db(self):
+    def __init_db(self) -> int:
         """
         Инициализация базы данных
         :return: возвращает всегда 0, так как исключения обрабатываются в вызываемой процедуре
@@ -172,59 +172,59 @@ class ControllerDB:
                            title VARCHAR(255) NOT NULL);""")
         return 0
 
-    def get_user(self, user_id):
+    def get_user(self, user_id: int) -> dict:
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает -1
+        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
         """
         result = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
         if len(result) == 0:
-            return -1
+            return {}
         return result[0]
 
-    def get_users(self):
+    def get_users(self) -> list:
         """
         Возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает -1
+        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
         """
         result = self.__make_query("SELECT * FROM users")
         if len(result) == 0:
-            return -1
+            return []
         return result
 
-    def add_user(self, user_id, title):
+    def add_user(self, user_id: int, title: str):
         """
         Добавляет нового пользователя в базу
         :param user_id: целочисленное значение id пользователя
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
-        if self.get_user(user_id) == -1:
+        if self.get_user(user_id) == {}:
             self.__make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
                               user_id=user_id, title=title)
             return 0
         return -1
 
-    def del_user(self, user_id):
+    def del_user(self, user_id: int):
         """
         Удаляет одного пользователя из базы
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
-        if self.get_user(user_id) != -1:
+        if self.get_user(user_id) != {}:
             self.__make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
             return 0
         return -1
 
-    def upd_user(self, user_id, title):
+    def upd_user(self, user_id: int, title: str):
         """
         Обновляет данные пользователя в соответствии с переданными параметрами
         :param user_id: целочисленное значение id пользователя
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
-        if self.get_user(user_id) != -1:
+        if self.get_user(user_id) != {}:
             self.__make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
                               user_id=user_id, title=title)
             return 0
@@ -290,24 +290,24 @@ class Repo:
 
         return options
 
-    def get_user(self, user_id):
+    def get_user(self, user_id: int) -> dict:
         """
         Передаёт управление контроллеру, а тот возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает -1
+        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
         """
         result = self.__controller.get_user(user_id)
         return result
 
-    def get_users(self):
+    def get_users(self) -> list:
         """
         Передаёт управление контроллеру, а тот возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает -1
+        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
         """
         result = self.__controller.get_users()
         return result
 
-    def add_user(self, user_id, title):
+    def add_user(self, user_id: int, title: str) -> int:
         """
         Передаёт управление контроллеру, а тот добавляет нового пользователя в базу
         :param user_id: целочисленное значение id пользователя
@@ -317,7 +317,7 @@ class Repo:
         result = self.__controller.add_user(user_id, title)
         return result
 
-    def del_user(self, user_id):
+    def del_user(self, user_id: int) -> int:
         """
         Передаёт управление контроллеру, а тот удаляет одного пользователя из базы
         :param user_id: целочисленное значение id пользователя
@@ -326,7 +326,7 @@ class Repo:
         result = self.__controller.del_user(user_id)
         return result
 
-    def upd_user(self, user_id, title):
+    def upd_user(self, user_id: int, title: str) -> int:
         """
         Передаёт управление контроллеру, а тот обновляет данные пользователя в соответствии с переданными параметрами
         :param user_id: целочисленное значение id пользователя
@@ -347,7 +347,7 @@ repo = Repo()  # инициализация репозитория. Област
 
 
 @app.route('/user/<int:user_id>', methods=['GET'])
-def get_user(user_id):
+def get_user(user_id: int) -> (str, int):
     """
     Точка входа для запроса на получение записи пользователя по id. Пример запроса:
     curl http://localhost:80/user/2
@@ -357,13 +357,13 @@ def get_user(user_id):
              Формат возвращаемого значения: {"id": user_id, "title": title}
     """
     user = repo.get_user(user_id)
-    if user == -1:
+    if user == {}:
         return "Rejected. No user with id=" + str(user_id), 404
     return jsonify(user), 200
 
 
 @app.route('/users', methods=['GET'])
-def get_users():
+def get_users() -> (str, int):
     """
     Точка входа для запроса на получение записи пользователя по id. Пример запроса:
     curl http://localhost:80/users
@@ -372,13 +372,13 @@ def get_users():
              Формат возвращаемого значения: [{"id": user_id1, "title": title1}, {"id": user_id2, "title": title2}]
     """
     users = repo.get_users()
-    if users == -1:
+    if not users:
         return "Rejected. DB is empty", 404
     return jsonify(users), 200
 
 
 @app.route('/user/<int:user_id>', methods=['POST'])
-def add_user(user_id):
+def add_user(user_id: int) -> (str, int):
     """
     Точка входа для запроса на добавление записи пользователя по id. Пример запроса:
     curl -X POST http://localhost:80/user/3?title=Mikhail%20Vasilevich%20Lomonosov
@@ -394,7 +394,7 @@ def add_user(user_id):
 
 
 @app.route('/user/<int:user_id>', methods=['DELETE'])
-def del_user(user_id):
+def del_user(user_id: int) -> (str, int):
     """
     Точка входа для запроса на удаление записи пользователя по id. Пример запроса:
     curl -X DELETE http://localhost:80/user/3
@@ -408,7 +408,7 @@ def del_user(user_id):
 
 
 @app.route('/user/<int:user_id>', methods=['PATCH'])
-def upd_user(user_id):
+def upd_user(user_id: int) -> (str, int):
     """
     Точка входа для запроса на изменение записи пользователя по id. Пример запроса:
     curl -X PATCH http://localhost:80/user/3?title=Aleksandr%20Sergeevich%20Pushkin
@@ -432,5 +432,3 @@ if __name__ == '__main__':
     repo.add_user(1, "Pyotr Pervy")
     repo.add_user(2, "Aleksandr Sergeevich Pushkin")
     app.run(host="127.0.0.1", port=80)
-
-
