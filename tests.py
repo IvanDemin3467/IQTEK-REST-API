@@ -46,9 +46,9 @@ if __name__ == '__main__':
     tester = Tester()
 
     # post(URL + "user/1?Pyotr%20Pervy")
-    tester.sample_test("Первоначальное заполнение базы", "user/1?Pyotr%20Pervy", post, 204)
+    tester.sample_test("Первоначальное заполнение базы", "user/1?title=Pyotr%20Pervy", post, 204)
     # post(URL + "user/2?Aleksandr%20Sergeevich%20Pushkin")
-    tester.sample_test("Первоначальное заполнение базы", "user/2?Aleksandr%20Sergeevich%20Pushkin", post, 204)
+    tester.sample_test("Первоначальное заполнение базы", "user/2?title=Aleksandr%20Sergeevich%20Pushkin", post, 204)
 
     # Successful
 

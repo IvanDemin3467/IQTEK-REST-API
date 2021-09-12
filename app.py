@@ -8,6 +8,7 @@ OPTIONS_FILE_PATH = "options.txt"
 DB_NAME = "sample_database"
 
 
+# Repository start
 class Entity:
     def __init__(self, entity_id: int, title: str) -> None:
         self.id = entity_id
@@ -35,6 +36,295 @@ class AbstractRepository(ABC):
     @abstractmethod
     def update(self, reference) -> Entity:
         raise NotImplementedError
+
+
+class RepositoryRAM(AbstractRepository):
+    """
+    Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в оперативной памяти.
+    Он может быть подключен к классу RepositoryCreator в качестве одного из дух возможных контроллеров.
+    Другая возможность - использовать контроллер RepositoryMySQL
+    """
+
+    def __init__(self, options: dict):
+        """
+        Простая инициализация
+        Формат базы: список словарей с данными пользователей
+        :param options: словарь параметров. В данном контроллере не используется. Нет необходимости
+        """
+        self.__options = options  # Сохраняются параметры, переданные в конструктор
+        self.__db = []  # Инициализируется база пользователей.
+
+    def get(self, user_id: int) -> dict:
+        """
+        Возвращает одного пользователя по id
+        :param user_id: целочисленное значение id пользователя
+        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
+        """
+        for entry in self.__db:
+            if entry["id"] == user_id:
+                return entry
+        return {}
+
+    def list(self) -> list:
+        """
+        Возвращает всех пользователей в базе
+        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
+        """
+        result = self.__db
+        if len(result) != 0:
+            return result
+        return []
+
+    def add(self, entity: Entity) -> int:
+        """
+        Добавляет нового пользователя в базу
+        :param user_id: целочисленное значение id пользователя
+        :param title: строковое значение ФИО пользователя
+        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
+        """
+        new_user = {"id": entity.id, "title": entity.title}
+        if self.get(entity.id) == {}:
+            self.__db.append(new_user)
+            return 0
+        return -1
+
+    def __get_index(self, user_id: int) -> int:
+        """
+        Вспомогательная процедура для поиска индекса пользователя по известному id.
+        Нужна, так как база реализована в виде списка
+        :param user_id: целочисленное значение id пользователя
+        :return: если пользователь с таким id существует, то возвращает индекс, иначе возвращает -1
+        """
+        for i in range(len(self.__db)):
+            entry = self.__db[i]
+            if entry["id"] == user_id:
+                return i
+        return -1
+
+    def delete(self, user_id: int) -> int:
+        """
+        Удаляет одного пользователя из базы
+        :param user_id: целочисленное значение id пользователя
+        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
+        """
+        i = self.__get_index(user_id)
+        if i != -1:
+            del self.__db[i]
+            return 0
+        return -1
+
+    def update(self, entity: Entity) -> int:
+        """
+        Обновляет данные пользователя в соответствии с переданными параметрами
+        :param user_id: целочисленное значение id пользователя
+        :param title: строковое значение ФИО пользователя
+        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
+        """
+        new_user = {"id": entity.id, "title": entity.title}
+        i = self.__get_index(entity.id)
+        if i != -1:
+            self.__db[i] = new_user
+            return 0
+        return -1
+
+
+class RepositoryMySQL(AbstractRepository):
+    """
+    Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в базе данных.
+    Работает с базами MySQL. Используется доступ по логину и паролю
+    Он может быть подключен к классу RepositoryCreator в качестве одного из дух возможных контроллеров.
+    Другая возможность - использовать контроллер RepositoryRAM.
+    """
+
+    def __init__(self, options: dict):
+        """
+        Простая инициализация
+        :param options: словарь параметров. Загружается из файла. Для данного контроллера используются параметры
+            username, password
+        """
+        self.__options = options
+        self.__init_db()
+
+    def __get_db_connection(self):
+        """
+        Вспомогательная процедура для создания подключения к базе данных, расположенной на локальном компьютере.
+        В качестве параметров использует логин и пароль, хранимые в словаре __options.
+        В качестве имени базы использует значение глобальной константы DB_NAME
+        :return: если подключение к базе успешно, то возвращает объект mysql.connector.connect, иначе возвращает None
+        """
+        try:
+            return connect(
+                host="localhost",
+                user=self.__options["username"],
+                password=self.__options["password"],
+                database=DB_NAME,
+            )
+        except Error as e:
+            print(e)
+            return None
+
+    def __make_query(self, query: str, user_id=0, title="") -> list:
+        """
+        Вспомогательная процедура для создания запросов к базе данных
+        Использует передачу именованных параметров для противостояния атакам SQL injection
+        Если при вызове программист передал небезопасный запрос, то исключения не возникает
+        :param query: строка запроса к базе, отформатированная в соответствии со стандартами MySQL
+        :param user_id: целочисленное значение id пользователя для передачи в качестве параметра в запрос
+        :param title: строковое значение ФИО пользователя для передачи в качестве параметра в запрос
+        :return: возвращает ответ от базы данных.
+        Это может быть список словарей с данными пользователей в случае запроса SELECT,
+        либо пустая строка в других случаях
+        Если запрос к базе возвращает исключение, то данная процедура возвращает []
+        """
+        try:
+            conn = self.__get_db_connection()  # Создать подключение
+            with conn.cursor(dictionary=True) as cursor:  # параметр dictionary указывает, что курсор возвращает словари
+                cursor.execute(query, {'user_id': user_id, 'title': title})  # выполнить запрос безопасным образом
+                result = cursor.fetchall()  # получить результаты выполнения
+                cursor.close()  # вручную закрыть курсор
+            conn.commit()  # вручную указать, что транзакции завершены
+            conn.close()  # вручную закрыть соединение
+            return result
+        except Error as err:
+            print(f"Error with db: {err}")
+            return []
+
+    def __init_db(self) -> int:
+        """
+        Инициализация базы данных
+        :return: возвращает всегда 0, так как исключения обрабатываются в вызываемой процедуре
+        """
+        self.__make_query(
+            f"CREATE DATABASE IF NOT EXISTS {DB_NAME};")  # создать базу с именем DB_NAME, если не существует
+        self.__make_query("DROP TABLE IF EXISTS users;")  # удаляем таблицу из предыдущих запусков
+        # далее создать таблицу.
+        # id: целочисленное без автоматического инкремента
+        # title: строковое с максимальной длинной 255
+        self.__make_query("""CREATE TABLE IF NOT EXISTS users (
+                           id INT PRIMARY KEY,
+                           title VARCHAR(255) NOT NULL);""")
+        return 0
+
+    def get(self, user_id: int) -> dict:
+        """
+        Возвращает одного пользователя по id
+        :param user_id: целочисленное значение id пользователя
+        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
+        """
+        result = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
+        if len(result) == 0:
+            return {}
+        return result[0]
+
+    def list(self) -> list:
+        """
+        Возвращает всех пользователей в базе
+        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
+        """
+        result = self.__make_query("SELECT * FROM users")
+        if len(result) == 0:
+            return []
+        return result
+
+    def add(self, entity: Entity):
+        """
+        Добавляет нового пользователя в базу
+        :param user_id: целочисленное значение id пользователя
+        :param title: строковое значение ФИО пользователя
+        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
+        """
+        if self.get(entity.id) == {}:
+            self.__make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
+                              user_id=entity.id, title=entity.title)
+            return 0
+        return -1
+
+    def delete(self, user_id: int):
+        """
+        Удаляет одного пользователя из базы
+        :param user_id: целочисленное значение id пользователя
+        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
+        """
+        if self.get(user_id) != {}:
+            self.__make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
+            return 0
+        return -1
+
+    def update(self, entity: Entity):
+        """
+        Обновляет данные пользователя в соответствии с переданными параметрами
+        :param user_id: целочисленное значение id пользователя
+        :param title: строковое значение ФИО пользователя
+        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
+        """
+        if self.get(entity.id) != {}:
+            self.__make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
+                              user_id=entity.id, title=entity.title)
+            return 0
+        return -1
+
+
+class RepositoryCreator:
+    """
+    Этот класс загружает в качестве контроллера один из двух вариантов:
+        RepositoryMySQL для хранения записей пользователей в MySQL базе данных или
+        RepositoryRAM для хранения записей пользователей в оперативной памяти.
+    Также он загружает настройки программы из файла при помощи метода get_options()
+    Методы get_user(), get_users(), add_user(), del_user(), upd_user() - это интерфейсы подключения контроллера
+    """
+    def __init__(self):
+        """
+        Простая инициализация. Запускает получение настроек программы. Выбирает один из двух контроллеров
+        """
+        self.__options = self.__get_options()
+        if self.__options["use_db_repo"]:
+            self.__controller = RepositoryMySQL(self.__options)
+        else:
+            self.__controller = RepositoryRAM(self.__options)
+
+    @staticmethod
+    def __get_options():
+        """
+        Вспомогательный статический метод.
+        Считывает настройки программы из файла OPTIONS_FILE_PATH.
+        Рекомендации по форматированию параметров приведены в комментариях в файле.
+        :return: словарь с настройками
+            use_db_repo: принимает значение True, если в данные пользователей хранятся в MySQL базе, иначе False
+            username: логин для доступа к базе
+            password: пароль для доступа к базе
+        """
+
+        options = {"use_db_repo": False, "username": None, "password": None}  # настройки по умолчанию
+
+        try:
+            s = open(OPTIONS_FILE_PATH, "rt", encoding="utf-8")
+            stream = list(s)
+            s.close()
+        except OSError:
+            print("Got exception while reading options from file")
+            return options
+
+        for line in stream:  # начало считывания параметров
+            if line.lstrip().startswith("#"):  # do not read comments
+                continue
+            # прочитать содержимое следующей строки из файла
+            line = line.rstrip("\r\n")  # вручную убрать символы перевода строки и возврата каретки
+            fragments = line.split(":")  # выделить ключ и значение из строки
+            # считать значение параметра для выбора контроллера
+            if "use_db_repo" in fragments[0]:
+                if "True" in fragments[1]:
+                    options["use_db_repo"] = True
+            # считать значение логина
+            elif "username" in fragments[0]:
+                options["username"] = fragments[1]
+            # считать значение пароля
+            elif "password" in fragments[0]:
+                options["password"] = fragments[1]
+
+        return options
+
+    def factory(self):
+        return self.__controller
 
 
 # Factory start
@@ -144,345 +434,13 @@ if __name__ == "__main__":
 # Factory end
 
 
-class ControllerRAM(AbstractRepository):
-    """
-    Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в оперативной памяти.
-    Он может быть подключен к классу Repo в качестве одного из дух возможных контроллеров.
-    Другая возможность - использовать контроллер ControllerDB
-    """
-
-    def __init__(self, options: dict):
-        """
-        Простая инициализация
-        Формат базы: список словарей с данными пользователей
-        :param options: словарь параметров. В данном контроллере не используется. Нет необходимости
-        """
-        self.__options = options  # Сохраняются параметры, переданные в конструктор
-        self.__db = []  # Инициализируется база пользователей.
-
-    def get(self, user_id: int) -> dict:
-        """
-        Возвращает одного пользователя по id
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
-        """
-        for entry in self.__db:
-            if entry["id"] == user_id:
-                return entry
-        return {}
-
-    def list(self) -> list:
-        """
-        Возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
-        """
-        result = self.__db
-        if len(result) != 0:
-            return result
-        return []
-
-    def add(self, entity: Entity) -> int:
-        """
-        Добавляет нового пользователя в базу
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
-        """
-        new_user = {"id": entity.id, "title": entity.title}
-        if self.get(entity.id) == {}:
-            self.__db.append(new_user)
-            return 0
-        return -1
-
-    def __get_index(self, user_id: int) -> int:
-        """
-        Вспомогательная процедура для поиска индекса пользователя по известному id.
-        Нужна, так как база реализована в виде списка
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь с таким id существует, то возвращает индекс, иначе возвращает -1
-        """
-        for i in range(len(self.__db)):
-            entry = self.__db[i]
-            if entry["id"] == user_id:
-                return i
-        return -1
-
-    def delete(self, user_id: int) -> int:
-        """
-        Удаляет одного пользователя из базы
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
-        """
-        i = self.__get_index(user_id)
-        if i != -1:
-            del self.__db[i]
-            return 0
-        return -1
-
-    def update(self, entity: Entity) -> int:
-        """
-        Обновляет данные пользователя в соответствии с переданными параметрами
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
-        """
-        new_user = {"id": entity.id, "title": entity.title}
-        i = self.__get_index(entity.id)
-        if i != -1:
-            self.__db[i] = new_user
-            return 0
-        return -1
-
-
-class ControllerDB(AbstractRepository):
-    """
-    Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в базе данных.
-    Работает с базами MySQL. Используется доступ по логину и паролю
-    Он может быть подключен к классу Repo в качестве одного из дух возможных контроллеров.
-    Другая возможность - использовать контроллер ControllerRAM.
-    """
-
-    def __init__(self, options: dict):
-        """
-        Простая инициализация
-        :param options: словарь параметров. Загружается из файла. Для данного контроллера используются параметры
-            username, password
-        """
-        self.__options = options
-        self.__init_db()
-
-    def __get_db_connection(self):
-        """
-        Вспомогательная процедура для создания подключения к базе данных, расположенной на локальном компьютере.
-        В качестве параметров использует логин и пароль, хранимые в словаре __options.
-        В качестве имени базы использует значение глобальной константы DB_NAME
-        :return: если подключение к базе успешно, то возвращает объект mysql.connector.connect, иначе возвращает None
-        """
-        try:
-            return connect(
-                host="localhost",
-                user=self.__options["username"],
-                password=self.__options["password"],
-                database=DB_NAME,
-            )
-        except Error as e:
-            print(e)
-            return None
-
-    def __make_query(self, query: str, user_id=0, title="") -> list:
-        """
-        Вспомогательная процедура для создания запросов к базе данных
-        Использует передачу именованных параметров для противостояния атакам SQL injection
-        Если при вызове программист передал небезопасный запрос, то исключения не возникает
-        :param query: строка запроса к базе, отформатированная в соответствии со стандартами MySQL
-        :param user_id: целочисленное значение id пользователя для передачи в качестве параметра в запрос
-        :param title: строковое значение ФИО пользователя для передачи в качестве параметра в запрос
-        :return: возвращает ответ от базы данных.
-        Это может быть список словарей с данными пользователей в случае запроса SELECT,
-        либо пустая строка в других случаях
-        Если запрос к базе возвращает исключение, то данная процедура возвращает []
-        """
-        try:
-            conn = self.__get_db_connection()  # Создать подключение
-            with conn.cursor(dictionary=True) as cursor:  # параметр dictionary указывает, что курсор возвращает словари
-                cursor.execute(query, {'user_id': user_id, 'title': title})  # выполнить запрос безопасным образом
-                result = cursor.fetchall()  # получить результаты выполнения
-                cursor.close()  # вручную закрыть курсор
-            conn.commit()  # вручную указать, что транзакции завершены
-            conn.close()  # вручную закрыть соединение
-            return result
-        except Error as err:
-            print(f"Error with db: {err}")
-            return []
-
-    def __init_db(self) -> int:
-        """
-        Инициализация базы данных
-        :return: возвращает всегда 0, так как исключения обрабатываются в вызываемой процедуре
-        """
-        self.__make_query(
-            f"CREATE DATABASE IF NOT EXISTS {DB_NAME};")  # создать базу с именем DB_NAME, если не существует
-        # self.make_query("DROP TABLE IF EXISTS users;")  # не удаляем таблицу из предыдущих запусков
-        # далее создать таблицу.
-        # id: целочисленное без автоматического инкремента
-        # title: строковое с максимальной длинной 255
-        self.__make_query("""CREATE TABLE IF NOT EXISTS users (
-                           id INT PRIMARY KEY,
-                           title VARCHAR(255) NOT NULL);""")
-        return 0
-
-    def get(self, user_id: int) -> dict:
-        """
-        Возвращает одного пользователя по id
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
-        """
-        result = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
-        if len(result) == 0:
-            return {}
-        return result[0]
-
-    def list(self) -> list:
-        """
-        Возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
-        """
-        result = self.__make_query("SELECT * FROM users")
-        if len(result) == 0:
-            return []
-        return result
-
-    def add(self, entity: Entity):
-        """
-        Добавляет нового пользователя в базу
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
-        """
-        if self.get(entity.id) == {}:
-            self.__make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
-                              user_id=entity.id, title=entity.title)
-            return 0
-        return -1
-
-    def delete(self, user_id: int):
-        """
-        Удаляет одного пользователя из базы
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
-        """
-        if self.get(user_id) != {}:
-            self.__make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
-            return 0
-        return -1
-
-    def update(self, entity: Entity):
-        """
-        Обновляет данные пользователя в соответствии с переданными параметрами
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
-        """
-        if self.get(entity.id) != {}:
-            self.__make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
-                              user_id=entity.id, title=entity.title)
-            return 0
-        return -1
-
-
-class Repo:
-    """
-    Этот класс загружает в качестве контроллера один из двух вариантов:
-        ControllerDB для хранения записей пользователей в MySQL базе данных или
-        ControllerRAM для хранения записей пользователей в оперативной памяти.
-    Также он загружает настройки программы из файла при помощи метода get_options()
-    Методы get_user(), get_users(), add_user(), del_user(), upd_user() - это интерфейсы подключения контроллера
-    """
-    def __init__(self):
-        """
-        Простая инициализация. Запускает получение настроек программы. Выбирает один из двух контроллеров
-        """
-        self.__options = self.__get_options()
-        if self.__options["use_db_repo"]:
-            self.__controller = ControllerDB(self.__options)
-        else:
-            self.__controller = ControllerRAM(self.__options)
-
-    @staticmethod
-    def __get_options():
-        """
-        Вспомогательный статический метод.
-        Считывает настройки программы из файла OPTIONS_FILE_PATH.
-        Рекомендации по форматированию параметров приведены в комментариях в файле.
-        :return: словарь с настройками
-            use_db_repo: принимает значение True, если в данные пользователей хранятся в MySQL базе, иначе False
-            username: логин для доступа к базе
-            password: пароль для доступа к базе
-        """
-
-        options = {"use_db_repo": False, "username": None, "password": None}  # настройки по умолчанию
-
-        try:
-            s = open(OPTIONS_FILE_PATH, "rt", encoding="utf-8")
-            stream = list(s)
-            s.close()
-        except OSError:
-            print("Got exception while reading options from file")
-            return options
-
-        for line in stream:  # начало считывания параметров
-            if line.lstrip().startswith("#"):  # do not read comments
-                continue
-            # прочитать содержимое следующей строки из файла
-            line = line.rstrip("\r\n")  # вручную убрать символы перевода строки и возврата каретки
-            fragments = line.split(":")  # выделить ключ и значение из строки
-            # считать значение параметра для выбора контроллера
-            if "use_db_repo" in fragments[0]:
-                if "True" in fragments[1]:
-                    options["use_db_repo"] = True
-            # считать значение логина
-            elif "username" in fragments[0]:
-                options["username"] = fragments[1]
-            # считать значение пароля
-            elif "password" in fragments[0]:
-                options["password"] = fragments[1]
-
-        return options
-
-    def get_user(self, user_id: int) -> dict:
-        """
-        Передаёт управление контроллеру, а тот возвращает одного пользователя по id
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
-        """
-        result = self.__controller.get(user_id)
-        return result
-
-    def get_users(self) -> list:
-        """
-        Передаёт управление контроллеру, а тот возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
-        """
-        result = self.__controller.list()
-        return result
-
-    def add_user(self, entity: Entity) -> int:
-        """
-        Передаёт управление контроллеру, а тот добавляет нового пользователя в базу
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
-        """
-        result = self.__controller.add(entity)
-        return result
-
-    def del_user(self, user_id: int) -> int:
-        """
-        Передаёт управление контроллеру, а тот удаляет одного пользователя из базы
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
-        """
-        result = self.__controller.delete(user_id)
-        return result
-
-    def upd_user(self, entity: Entity) -> int:
-        """
-        Передаёт управление контроллеру, а тот обновляет данные пользователя в соответствии с переданными параметрами
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
-        """
-        result = self.__controller.update(entity)
-        return result
-
-
 """
 Начало работы REST API сервиса
 Небольшие приложения Flask принято разрабатывать в процедурном подходе
 """
 app = Flask(__name__)  # инициализация объекта, с которым сможет работать WSGI сервер
 app.config['SECRET_KEY'] = 'gh5ng843bh68hfi4nfc6h3ndh4xc53b56lk89gm4bf2gc6ehm'  # произвольная случайная длинная строка
-repo = Repo()  # инициализация репозитория. Область видимости - глобальная
+repo = RepositoryCreator().factory()  # инициализация репозитория
 
 
 @app.route('/user/<int:user_id>', methods=['GET'])
@@ -495,8 +453,8 @@ def get_user(user_id: int) -> (str, int):
              иначе возвращает код 404
              Формат возвращаемого значения: {"id": user_id, "title": title}
     """
-    user = repo.get_user(user_id)
-    if user is None:
+    user = repo.get(user_id)
+    if user == {}:
         return "Rejected. No user with id=" + str(user_id), 404
     return jsonify(user), 200
 
@@ -510,7 +468,7 @@ def get_users() -> (str, int):
              иначе возвращает код 404
              Формат возвращаемого значения: [{"id": user_id1, "title": title1}, {"id": user_id2, "title": title2}]
     """
-    result = repo.get_users()
+    result = repo.list()
     if not result:
         return "Rejected. DB is empty", 404
     users = []
@@ -532,7 +490,7 @@ def add_user(user_id: int) -> (str, int):
     """
     title = request.args.get('title')
     entity = Entity(user_id, title)
-    if repo.add_user(entity) == -1:
+    if repo.add(entity) == -1:
         return "Rejected. User with id=" + str(user_id) + " already exists", 422
     return 'Success. User created', 204
 
@@ -546,7 +504,7 @@ def del_user(user_id: int) -> (str, int):
     :return: если пользователь не существует в базе, то возвращает код 422,
              иначе удаляет его и возвращает код 204
     """
-    if repo.del_user(user_id) == -1:
+    if repo.delete(user_id) == -1:
         return "Rejected. No user with id=" + str(user_id), 404
     return 'Success. User deleted', 204
 
@@ -563,7 +521,7 @@ def upd_user(user_id: int) -> (str, int):
     """
     title = request.args.get('title')
     entity = Entity(user_id, title)
-    result = repo.upd_user(entity)
+    result = repo.update(entity)
     if result == -1:
         return "Rejected. No user with id=" + str(user_id), 404
     return 'Success. User updated', 204
