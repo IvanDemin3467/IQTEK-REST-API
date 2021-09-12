@@ -6,19 +6,20 @@ from flask import Flask, jsonify, request
 
 OPTIONS_FILE_PATH = "options.txt"
 DB_NAME = "sample_database"
+REPOSITORY_CREATION_METHOD = "from-file"
 
-
-# Repository start
+# Factory fot entities start
 class Entity:
     def __init__(self, entity_id: int, title: str) -> None:
         self.id = entity_id
         self.title = title
 
 
+# AbstractRepository start
 class AbstractRepository(ABC):
 
     @abstractmethod
-    def add(self, entity: Entity):
+    def get(self, reference) -> Entity:
         raise NotImplementedError
 
     @abstractmethod
@@ -26,11 +27,11 @@ class AbstractRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, reference) -> Entity:
+    def add(self, entity: Entity) -> int:
         raise NotImplementedError
 
     @abstractmethod
-    def delete(self, reference) -> Entity:
+    def delete(self, reference) -> int:
         raise NotImplementedError
 
     @abstractmethod
@@ -41,7 +42,7 @@ class AbstractRepository(ABC):
 class RepositoryRAM(AbstractRepository):
     """
     Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в оперативной памяти.
-    Он может быть подключен к классу RepositoryCreator в качестве одного из дух возможных контроллеров.
+    Он может быть подключен к классу RepositoryCreatorFromFile в качестве одного из дух возможных контроллеров.
     Другая возможность - использовать контроллер RepositoryMySQL
     """
 
@@ -53,6 +54,19 @@ class RepositoryRAM(AbstractRepository):
         """
         self.__options = options  # Сохраняются параметры, переданные в конструктор
         self.__db = []  # Инициализируется база пользователей.
+
+    def __get_index(self, user_id: int) -> int:
+        """
+        Вспомогательная процедура для поиска индекса пользователя по известному id.
+        Нужна, так как база реализована в виде списка
+        :param user_id: целочисленное значение id пользователя
+        :return: если пользователь с таким id существует, то возвращает индекс, иначе возвращает -1
+        """
+        for i in range(len(self.__db)):
+            entry = self.__db[i]
+            if entry["id"] == user_id:
+                return i
+        return -1
 
     def get(self, user_id: int) -> dict:
         """
@@ -88,19 +102,6 @@ class RepositoryRAM(AbstractRepository):
             return 0
         return -1
 
-    def __get_index(self, user_id: int) -> int:
-        """
-        Вспомогательная процедура для поиска индекса пользователя по известному id.
-        Нужна, так как база реализована в виде списка
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь с таким id существует, то возвращает индекс, иначе возвращает -1
-        """
-        for i in range(len(self.__db)):
-            entry = self.__db[i]
-            if entry["id"] == user_id:
-                return i
-        return -1
-
     def delete(self, user_id: int) -> int:
         """
         Удаляет одного пользователя из базы
@@ -132,7 +133,7 @@ class RepositoryMySQL(AbstractRepository):
     """
     Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в базе данных.
     Работает с базами MySQL. Используется доступ по логину и паролю
-    Он может быть подключен к классу RepositoryCreator в качестве одного из дух возможных контроллеров.
+    Он может быть подключен к классу RepositoryCreatorFromFile в качестве одного из дух возможных контроллеров.
     Другая возможность - использовать контроллер RepositoryRAM.
     """
 
@@ -264,7 +265,19 @@ class RepositoryMySQL(AbstractRepository):
         return -1
 
 
-class RepositoryCreator:
+class AbstractRepositoryCreator(ABC):
+    @abstractmethod
+    def factory(self) -> AbstractRepository:
+        raise NotImplementedError
+
+
+class InterfaceRepositoryCreator:
+    def create(self):
+        if REPOSITORY_CREATION_METHOD == "from-file":
+            return RepositoryCreatorFromFile()
+
+
+class RepositoryCreatorFromFile(AbstractRepositoryCreator):
     """
     Этот класс загружает в качестве контроллера один из двух вариантов:
         RepositoryMySQL для хранения записей пользователей в MySQL базе данных или
@@ -323,11 +336,11 @@ class RepositoryCreator:
 
         return options
 
-    def factory(self):
+    def factory(self) -> AbstractRepository:
         return self.__controller
 
 
-# Factory start
+# Sample Factory start
 
 class Creator(ABC):
     """
@@ -440,7 +453,7 @@ if __name__ == "__main__":
 """
 app = Flask(__name__)  # инициализация объекта, с которым сможет работать WSGI сервер
 app.config['SECRET_KEY'] = 'gh5ng843bh68hfi4nfc6h3ndh4xc53b56lk89gm4bf2gc6ehm'  # произвольная случайная длинная строка
-repo = RepositoryCreator().factory()  # инициализация репозитория
+repo = InterfaceRepositoryCreator().create().factory()  # инициализация репозитория
 
 
 @app.route('/user/<int:user_id>', methods=['GET'])
