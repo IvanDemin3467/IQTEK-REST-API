@@ -42,7 +42,7 @@ class AbstractRepository(ABC):
 class RepositoryRAM(AbstractRepository):
     """
     Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в оперативной памяти.
-    Он может быть подключен к классу RepositoryCreatorFromFile в качестве одного из дух возможных контроллеров.
+    Он может быть подключен к классу RepositorySelector в качестве одного из дух возможных контроллеров.
     Другая возможность - использовать контроллер RepositoryMySQL
     """
 
@@ -68,7 +68,7 @@ class RepositoryRAM(AbstractRepository):
                 return i
         return -1
 
-    def get(self, user_id: int) -> dict:
+    def get(self, user_id: int) -> Entity:
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
@@ -79,7 +79,7 @@ class RepositoryRAM(AbstractRepository):
                 return entry
         return {}
 
-    def list(self) -> list:
+    def list(self) -> list[Entity]:
         """
         Возвращает всех пользователей в базе
         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
@@ -133,7 +133,7 @@ class RepositoryMySQL(AbstractRepository):
     """
     Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в базе данных.
     Работает с базами MySQL. Используется доступ по логину и паролю
-    Он может быть подключен к классу RepositoryCreatorFromFile в качестве одного из дух возможных контроллеров.
+    Он может быть подключен к классу RepositorySelector в качестве одного из дух возможных контроллеров.
     Другая возможность - использовать контроллер RepositoryRAM.
     """
 
@@ -227,7 +227,7 @@ class RepositoryMySQL(AbstractRepository):
             return []
         return result
 
-    def add(self, entity: Entity):
+    def add(self, entity: Entity) -> int:
         """
         Добавляет нового пользователя в базу
         :param user_id: целочисленное значение id пользователя
@@ -240,7 +240,7 @@ class RepositoryMySQL(AbstractRepository):
             return 0
         return -1
 
-    def delete(self, user_id: int):
+    def delete(self, user_id: int) -> int:
         """
         Удаляет одного пользователя из базы
         :param user_id: целочисленное значение id пользователя
@@ -251,7 +251,7 @@ class RepositoryMySQL(AbstractRepository):
             return 0
         return -1
 
-    def update(self, entity: Entity):
+    def update(self, entity: Entity) -> int:
         """
         Обновляет данные пользователя в соответствии с переданными параметрами
         :param user_id: целочисленное значение id пользователя
@@ -265,19 +265,58 @@ class RepositoryMySQL(AbstractRepository):
         return -1
 
 
-class AbstractRepositoryCreator(ABC):
-    @abstractmethod
-    def factory(self) -> AbstractRepository:
-        raise NotImplementedError
+class InterfaceRepository:
+    def __init__(self):
+        self.__repository = RepositorySelector().select()
+
+    def get(self, user_id: int) -> Entity:
+        """
+        Передаёт управление контроллеру, а тот возвращает одного пользователя по id
+        :param user_id: целочисленное значение id пользователя
+        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
+        """
+        result = self.__repository.get(user_id)
+        return result
+
+    def list(self) -> list[Entity]:
+        """
+        Передаёт управление контроллеру, а тот возвращает всех пользователей в базе
+        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
+        """
+        result = self.__repository.list()
+        return result
+
+    def add(self, entity: Entity) -> int:
+        """
+        Передаёт управление контроллеру, а тот добавляет нового пользователя в базу
+        :param user_id: целочисленное значение id пользователя
+        :param title: строковое значение ФИО пользователя
+        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
+        """
+        result = self.__repository.add(entity)
+        return result
+
+    def delete(self, user_id: int) -> int:
+        """
+        Передаёт управление контроллеру, а тот удаляет одного пользователя из базы
+        :param user_id: целочисленное значение id пользователя
+        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
+        """
+        result = self.__repository.delete(user_id)
+        return result
+
+    def update(self, entity: Entity) -> int:
+        """
+        Передаёт управление контроллеру, а тот обновляет данные пользователя в соответствии с переданными параметрами
+        :param user_id: целочисленное значение id пользователя
+        :param title: строковое значение ФИО пользователя
+        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
+        """
+        result = self.__repository.update(entity)
+        return result
 
 
-class InterfaceRepositoryCreator:
-    def create(self):
-        if REPOSITORY_CREATION_METHOD == "from-file":
-            return RepositoryCreatorFromFile()
-
-
-class RepositoryCreatorFromFile(AbstractRepositoryCreator):
+class RepositorySelector:
     """
     Этот класс загружает в качестве контроллера один из двух вариантов:
         RepositoryMySQL для хранения записей пользователей в MySQL базе данных или
@@ -289,11 +328,6 @@ class RepositoryCreatorFromFile(AbstractRepositoryCreator):
         """
         Простая инициализация. Запускает получение настроек программы. Выбирает один из двух контроллеров
         """
-        self.__options = self.__get_options()
-        if self.__options["use_db_repo"]:
-            self.__controller = RepositoryMySQL(self.__options)
-        else:
-            self.__controller = RepositoryRAM(self.__options)
 
     @staticmethod
     def __get_options():
@@ -336,7 +370,17 @@ class RepositoryCreatorFromFile(AbstractRepositoryCreator):
 
         return options
 
-    def factory(self) -> AbstractRepository:
+    def select(self) -> AbstractRepository:
+        if REPOSITORY_CREATION_METHOD == "from-file":
+            self.__select_from_file()
+        return self.__controller
+
+    def __select_from_file(self) -> AbstractRepository:
+        self.__options = self.__get_options()
+        if self.__options["use_db_repo"]:
+            self.__controller = RepositoryMySQL(self.__options)
+        else:
+            self.__controller = RepositoryRAM(self.__options)
         return self.__controller
 
 
@@ -453,7 +497,7 @@ if __name__ == "__main__":
 """
 app = Flask(__name__)  # инициализация объекта, с которым сможет работать WSGI сервер
 app.config['SECRET_KEY'] = 'gh5ng843bh68hfi4nfc6h3ndh4xc53b56lk89gm4bf2gc6ehm'  # произвольная случайная длинная строка
-repo = InterfaceRepositoryCreator().create().factory()  # инициализация репозитория
+repo = InterfaceRepository()  # инициализация репозитория
 
 
 @app.route('/user/<int:user_id>', methods=['GET'])
