@@ -3,8 +3,9 @@ from abc import ABC, abstractmethod
 
 from mysql.connector import connect, Error
 from flask import Flask, jsonify, request
+import json
 
-OPTIONS_FILE_PATH = "options.txt"
+OPTIONS_FILE_PATH = "options.json"
 DB_NAME = "sample_database"
 REPOSITORY_CREATION_METHOD = "from-file"
 
@@ -374,29 +375,18 @@ class RepositoryCreator(AbstractRepositoryCreator):
         options = {"use_db_repo": False, "username": None, "password": None}  # настройки по умолчанию
 
         try:
-            s = open(OPTIONS_FILE_PATH, "rt", encoding="utf-8")
-            stream = list(s)
-            s.close()
+            json_file = open(OPTIONS_FILE_PATH)
+            json_object = json.load(json_file)
+            json_file.close()
         except OSError:
             print("Got exception while reading options from file")
             return options
 
-        for line in stream:  # начало считывания параметров
-            if line.lstrip().startswith("#"):  # do not read comments
-                continue
-            # прочитать содержимое следующей строки из файла
-            line = line.rstrip("\r\n")  # вручную убрать символы перевода строки и возврата каретки
-            fragments = line.split(":")  # выделить ключ и значение из строки
-            # считать значение параметра для выбора контроллера
-            if "use_db_repo" in fragments[0]:
-                if "True" in fragments[1]:
-                    options["use_db_repo"] = True
-            # считать значение логина
-            elif "username" in fragments[0]:
-                options["username"] = fragments[1]
-            # считать значение пароля
-            elif "password" in fragments[0]:
-                options["password"] = fragments[1]
+        if json_object['use_db_repo'] == "True":
+            options["use_db_repo"] = True
+        options["username"] = json_object['username']
+        options["password"] = json_object['password']
+        print(options)
 
         return options
 
@@ -418,8 +408,10 @@ class RepositoryCreator(AbstractRepositoryCreator):
         self.__options = self.__get_options()
         if self.__options["use_db_repo"]:
             self.__repository = RepositoryMySQL(self.__options, self.factory)
+            print("Working with RepositoryMySQL")
         else:
             self.__repository = RepositoryRAM(self.__options, self.factory)
+            print("Working with RepositoryRAM")
 
 
 """
