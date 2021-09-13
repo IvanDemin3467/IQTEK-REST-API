@@ -15,7 +15,7 @@ class Tester:
         :return: None
         """
         print("\nПолучить все записи")
-        result = get(URL + 'users')
+        result = get(URL + 'user')
         print(result.status_code, result.text)
 
     def sample_test(self, message: str, resource: str, fun, code_expected=200):
@@ -52,7 +52,7 @@ if __name__ == '__main__':
 
     # Successful
 
-    tester.sample_test("Получить все записи", 'users', get, 200)
+    tester.sample_test("Получить все записи", 'user', get, 200)
 
     tester.sample_test("Получить одну запись с id=2", 'user/2', get, 200)
 
@@ -81,6 +81,6 @@ if __name__ == '__main__':
     tester.sample_test("", "user/2", delete)  # delete all
     # delete(URL + 'user/1')
     tester.sample_test("", "user/1", delete)
-    tester.sample_test("Отобразить пустую базу", "users", get, 404)
+    tester.sample_test("Отобразить пустую базу", "user", get, 404)
 
     tester.report()

@@ -440,7 +440,7 @@ def get_user(user_id: int) -> (str, int):
     return jsonify(user.get_dict()), 200
 
 
-@app.route('/users', methods=['GET'])
+@app.route('/user', methods=['GET'])
 def get_users() -> (str, int):
     """
     Точка входа для запроса на получение записи пользователя по id. Пример запроса:
