@@ -8,11 +8,55 @@ OPTIONS_FILE_PATH = "options.txt"
 DB_NAME = "sample_database"
 REPOSITORY_CREATION_METHOD = "from-file"
 
+
 # Factory fot entities start
-class Entity:
-    def __init__(self, entity_id: int, title: str) -> None:
+class Entity(ABC):
+    def __init__(self, entity_id: int, properties: dict) -> None:
         self.id = entity_id
-        self.title = title
+        self.properties = properties
+
+    @abstractmethod
+    def get_dict(self):
+        pass
+
+
+class User(Entity):
+    def __init__(self, user_id: int, properties: dict) -> None:
+        if user_id == -1:
+            properties = {"title": ""}
+        super().__init__(user_id, properties)
+
+    def get_dict(self):
+        result = {"id": self.id}
+        result.update(self.properties)
+        return result
+
+
+class AbstractFactory(ABC):
+    @abstractmethod
+    def create(self, entity_id: int, properties: dict):
+        raise NotImplementedError
+
+    @abstractmethod
+    def create_empty(self, entity_id: int, properties: dict):
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_factory_name(self) -> str:
+        raise NotImplementedError
+
+
+class UserFactory(AbstractFactory):
+    def create(self, user_id: int, properties: dict) -> Entity:
+        user = User(user_id, properties)
+        return user
+
+    def create_empty(self) -> Entity:
+        user = User(-1, {"title": ""})
+        return user
+
+    def get_factory_name(self) -> str:
+        return "user"
 
 
 # AbstractRepository start
@@ -35,7 +79,7 @@ class AbstractRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def update(self, reference) -> Entity:
+    def update(self, reference) -> int:
         raise NotImplementedError
 
 
@@ -46,7 +90,7 @@ class RepositoryRAM(AbstractRepository):
     Другая возможность - использовать контроллер RepositoryMySQL
     """
 
-    def __init__(self, options: dict):
+    def __init__(self, options: dict, fact: AbstractFactory):
         """
         Простая инициализация
         Формат базы: список словарей с данными пользователей
@@ -54,6 +98,7 @@ class RepositoryRAM(AbstractRepository):
         """
         self.__options = options  # Сохраняются параметры, переданные в конструктор
         self.__db = []  # Инициализируется база пользователей.
+        self.__factory = fact
 
     def __get_index(self, user_id: int) -> int:
         """
@@ -63,8 +108,7 @@ class RepositoryRAM(AbstractRepository):
         :return: если пользователь с таким id существует, то возвращает индекс, иначе возвращает -1
         """
         for i in range(len(self.__db)):
-            entry = self.__db[i]
-            if entry["id"] == user_id:
+            if self.__db[i].id == user_id:
                 return i
         return -1
 
@@ -74,10 +118,10 @@ class RepositoryRAM(AbstractRepository):
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
         """
-        for entry in self.__db:
-            if entry["id"] == user_id:
-                return entry
-        return {}
+        for entity in self.__db:
+            if entity.id == user_id:
+                return entity
+        return self.__factory.create_empty()
 
     def list(self) -> list[Entity]:
         """
@@ -96,9 +140,8 @@ class RepositoryRAM(AbstractRepository):
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
-        new_user = {"id": entity.id, "title": entity.title}
-        if self.get(entity.id) == {}:
-            self.__db.append(new_user)
+        if self.__get_index(entity.id) == -1:
+            self.__db.append(entity)
             return 0
         return -1
 
@@ -121,10 +164,9 @@ class RepositoryRAM(AbstractRepository):
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
-        new_user = {"id": entity.id, "title": entity.title}
         i = self.__get_index(entity.id)
         if i != -1:
-            self.__db[i] = new_user
+            self.__db[i] = entity
             return 0
         return -1
 
@@ -137,14 +179,16 @@ class RepositoryMySQL(AbstractRepository):
     Другая возможность - использовать контроллер RepositoryRAM.
     """
 
-    def __init__(self, options: dict):
+    def __init__(self, options: dict, fact: AbstractFactory):
         """
         Простая инициализация
+        :param factory:
         :param options: словарь параметров. Загружается из файла. Для данного контроллера используются параметры
             username, password
         """
         self.__options = options
         self.__init_db()
+        self.__factory = fact
 
     def __get_db_connection(self):
         """
@@ -206,7 +250,7 @@ class RepositoryMySQL(AbstractRepository):
                            title VARCHAR(255) NOT NULL);""")
         return 0
 
-    def get(self, user_id: int) -> dict:
+    def get(self, user_id: int) -> Entity:
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
@@ -214,17 +258,21 @@ class RepositoryMySQL(AbstractRepository):
         """
         result = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
         if len(result) == 0:
-            return {}
-        return result[0]
+            return self.__factory.create_empty()
+        entity = result[0]
+        return self.__factory.create(entity["id"], {"title": entity["title"]})
 
     def list(self) -> list:
         """
         Возвращает всех пользователей в базе
         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
         """
-        result = self.__make_query("SELECT * FROM users")
-        if len(result) == 0:
+        entities_list = self.__make_query("SELECT * FROM users")
+        if len(entities_list) == 0:
             return []
+        result = []
+        for entity in entities_list:
+            result.append(self.__factory.create(entity["id"], {"title": entity["title"]}))
         return result
 
     def add(self, entity: Entity) -> int:
@@ -234,9 +282,9 @@ class RepositoryMySQL(AbstractRepository):
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
         """
-        if self.get(entity.id) == {}:
+        if self.get(entity.id).id == -1:
             self.__make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
-                              user_id=entity.id, title=entity.title)
+                              user_id=entity.id, title=entity.properties["title"])
             return 0
         return -1
 
@@ -246,7 +294,7 @@ class RepositoryMySQL(AbstractRepository):
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
-        if self.get(user_id) != {}:
+        if self.get(user_id).id != -1:
             self.__make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
             return 0
         return -1
@@ -258,65 +306,73 @@ class RepositoryMySQL(AbstractRepository):
         :param title: строковое значение ФИО пользователя
         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
         """
-        if self.get(entity.id) != {}:
+        if self.get(entity.id).id != -1:
             self.__make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
-                              user_id=entity.id, title=entity.title)
+                              user_id=entity.id, title=entity.properties["title"])
             return 0
         return -1
 
+#
+# class InterfaceRepository:
+#     def __init__(self, fact: AbstractFactory):
+#         self.factory = fact
+#         self.__repository = RepositoryCreator().create()
+#
+#     def get(self, user_id: int) -> dict:
+#         """
+#         Передаёт управление контроллеру, а тот возвращает одного пользователя по id
+#         :param user_id: целочисленное значение id пользователя
+#         :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
+#         """
+#         result = self.__repository.get(user_id)
+#         return result
+#
+#     def list(self) -> list[dict]:
+#         """
+#         Передаёт управление контроллеру, а тот возвращает всех пользователей в базе
+#         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
+#         """
+#         result = self.__repository.list()
+#         return result
+#
+#     def add(self, entity: Entity) -> int:
+#         """
+#         Передаёт управление контроллеру, а тот добавляет нового пользователя в базу
+#         :param user_id: целочисленное значение id пользователя
+#         :param title: строковое значение ФИО пользователя
+#         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
+#         """
+#
+#         result = self.__repository.add(entity)
+#         return result
+#
+#     def delete(self, user_id: int) -> int:
+#         """
+#         Передаёт управление контроллеру, а тот удаляет одного пользователя из базы
+#         :param user_id: целочисленное значение id пользователя
+#         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
+#         """
+#         result = self.__repository.delete(user_id)
+#         return result
+#
+#     def update(self, entity: Entity) -> int:
+#         """
+#         Передаёт управление контроллеру, а тот обновляет данные пользователя в соответствии с переданными параметрами
+#         :param user_id: целочисленное значение id пользователя
+#         :param title: строковое значение ФИО пользователя
+#         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
+#         """
+#         result = self.__repository.update(entity)
+#         return result
 
-class InterfaceRepository:
-    def __init__(self):
-        self.__repository = RepositorySelector().select()
 
-    def get(self, user_id: int) -> Entity:
-        """
-        Передаёт управление контроллеру, а тот возвращает одного пользователя по id
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
-        """
-        result = self.__repository.get(user_id)
-        return result
-
-    def list(self) -> list[Entity]:
-        """
-        Передаёт управление контроллеру, а тот возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
-        """
-        result = self.__repository.list()
-        return result
-
-    def add(self, entity: Entity) -> int:
-        """
-        Передаёт управление контроллеру, а тот добавляет нового пользователя в базу
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
-        """
-        result = self.__repository.add(entity)
-        return result
-
-    def delete(self, user_id: int) -> int:
-        """
-        Передаёт управление контроллеру, а тот удаляет одного пользователя из базы
-        :param user_id: целочисленное значение id пользователя
-        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
-        """
-        result = self.__repository.delete(user_id)
-        return result
-
-    def update(self, entity: Entity) -> int:
-        """
-        Передаёт управление контроллеру, а тот обновляет данные пользователя в соответствии с переданными параметрами
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
-        """
-        result = self.__repository.update(entity)
-        return result
+class AbstractRepositoryCreator(ABC):
+    @abstractmethod
+    def create(self) -> AbstractRepository:
+        raise NotImplementedError
 
 
-class RepositorySelector:
+class RepositoryCreator(AbstractRepositoryCreator):
     """
     Этот класс загружает в качестве контроллера один из двух вариантов:
         RepositoryMySQL для хранения записей пользователей в MySQL базе данных или
@@ -324,10 +380,14 @@ class RepositorySelector:
     Также он загружает настройки программы из файла при помощи метода get_options()
     Методы get_user(), get_users(), add_user(), del_user(), upd_user() - это интерфейсы подключения контроллера
     """
-    def __init__(self):
+    def __init__(self, fact: AbstractFactory):
         """
-        Простая инициализация. Запускает получение настроек программы. Выбирает один из двух контроллеров
+        Простая инициализация
+        :param factory:
+        :param options: словарь параметров. Загружается из файла. Для данного контроллера используются параметры
+            username, password
         """
+        self.factory = fact
 
     @staticmethod
     def __get_options():
@@ -370,18 +430,17 @@ class RepositorySelector:
 
         return options
 
-    def select(self) -> AbstractRepository:
+    def create(self) -> AbstractRepository:
         if REPOSITORY_CREATION_METHOD == "from-file":
             self.__select_from_file()
-        return self.__controller
+        return self.__repository
 
-    def __select_from_file(self) -> AbstractRepository:
+    def __select_from_file(self) -> None:
         self.__options = self.__get_options()
         if self.__options["use_db_repo"]:
-            self.__controller = RepositoryMySQL(self.__options)
+            self.__repository = RepositoryMySQL(self.__options, self.factory)
         else:
-            self.__controller = RepositoryRAM(self.__options)
-        return self.__controller
+            self.__repository = RepositoryRAM(self.__options, self.factory)
 
 
 # Sample Factory start
@@ -497,7 +556,8 @@ if __name__ == "__main__":
 """
 app = Flask(__name__)  # инициализация объекта, с которым сможет работать WSGI сервер
 app.config['SECRET_KEY'] = 'gh5ng843bh68hfi4nfc6h3ndh4xc53b56lk89gm4bf2gc6ehm'  # произвольная случайная длинная строка
-repo = InterfaceRepository()  # инициализация репозитория
+factory = UserFactory()  # инициализация фабрики сущностей пользователей
+repo = RepositoryCreator(factory).create()  # инициализация репозитория
 
 
 @app.route('/user/<int:user_id>', methods=['GET'])
@@ -511,9 +571,9 @@ def get_user(user_id: int) -> (str, int):
              Формат возвращаемого значения: {"id": user_id, "title": title}
     """
     user = repo.get(user_id)
-    if user == {}:
+    if user.id == -1:
         return "Rejected. No user with id=" + str(user_id), 404
-    return jsonify(user), 200
+    return jsonify(user.get_dict()), 200
 
 
 @app.route('/users', methods=['GET'])
@@ -525,13 +585,12 @@ def get_users() -> (str, int):
              иначе возвращает код 404
              Формат возвращаемого значения: [{"id": user_id1, "title": title1}, {"id": user_id2, "title": title2}]
     """
-    result = repo.list()
-    if not result:
+    entities_list = repo.list()
+    if not entities_list:
         return "Rejected. DB is empty", 404
-    users = []
-    # for entity in result:
-    #     # entry = "id: " + str(entity.id) + ", title: " + str(entity.title)
-    #     users.append(entry)
+    result = []
+    for entity in entities_list:
+        result.append(entity.get_dict())
     return jsonify(result), 200
 
 
@@ -546,8 +605,8 @@ def add_user(user_id: int) -> (str, int):
              иначе создаёт и возвращает код 204
     """
     title = request.args.get('title')
-    entity = Entity(user_id, title)
-    if repo.add(entity) == -1:
+    user = factory.create(user_id, {'title': title})
+    if repo.add(user) == -1:
         return "Rejected. User with id=" + str(user_id) + " already exists", 422
     return 'Success. User created', 204
 
@@ -577,8 +636,8 @@ def upd_user(user_id: int) -> (str, int):
              иначе изменяет его данные и возвращает код 204
     """
     title = request.args.get('title')
-    entity = Entity(user_id, title)
-    result = repo.update(entity)
+    user = factory.create(user_id, {'title': title})
+    result = repo.update(user)
     if result == -1:
         return "Rejected. No user with id=" + str(user_id), 404
     return 'Success. User updated', 204
