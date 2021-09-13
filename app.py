@@ -9,7 +9,7 @@ DB_NAME = "sample_database"
 REPOSITORY_CREATION_METHOD = "from-file"
 
 
-# Factory fot entities start
+# Factory for entities start
 class Entity(ABC):
     def __init__(self, entity_id: int, properties: dict) -> None:
         self.id = entity_id
@@ -84,7 +84,7 @@ class UserFactory(AbstractFactory):
         return "user"
 
 
-# AbstractRepository start
+# Repository start
 class AbstractRepository(ABC):
     """
     Абстрактный репозиторий для работы с сущностями Entity
