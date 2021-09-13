@@ -16,29 +16,37 @@ class Entity(ABC):
         self.properties = properties
 
     @abstractmethod
-    def get_dict(self):
+    def get_dict(self) -> dict:
         pass
 
 
 class User(Entity):
+    """
+    Конкретный класс, реализующий абстракцию Entity. Предназначен для хранения id и ФИО пользователей
+    """
     def __init__(self, user_id: int, properties: dict) -> None:
-        if user_id == -1:
-            properties = {"title": ""}
         super().__init__(user_id, properties)
 
-    def get_dict(self):
+    def get_dict(self) -> dict:
+        """
+        Преобразовывает параметры сущности User в вид, подходящий для функции jsonify()
+        :return: словарь с параметрами сущность User
+        """
         result = {"id": self.id}
         result.update(self.properties)
         return result
 
 
 class AbstractFactory(ABC):
+    """
+    Абстрактная фабрика для создания сущностей Entity
+    """
     @abstractmethod
-    def create(self, entity_id: int, properties: dict):
+    def create(self, entity_id: int, properties: dict) -> Entity:
         raise NotImplementedError
 
     @abstractmethod
-    def create_empty(self, entity_id: int, properties: dict):
+    def create_empty(self) -> Entity:
         raise NotImplementedError
 
     @abstractmethod
@@ -47,20 +55,40 @@ class AbstractFactory(ABC):
 
 
 class UserFactory(AbstractFactory):
+    """
+    Конкретная реализация абстрактный фабрики. Предназначена для работы с сущностями User
+    """
     def create(self, user_id: int, properties: dict) -> Entity:
+        """
+        Создаёт сущность User в соответствии с переданными параметрами
+        :param user_id: целочисленное значение id пользователя
+        :param properties: строковое значение ФИО пользователя
+        :return: объект User с заполненными параметрами
+        """
         user = User(user_id, properties)
         return user
 
     def create_empty(self) -> Entity:
+        """
+        Создаёт сущность User с пустым ФИО и id=-1. Такой id служит признаком несуществующей сущности
+        :return: объект User с пустым ФИО и id=-1
+        """
         user = User(-1, {"title": ""})
         return user
 
     def get_factory_name(self) -> str:
+        """
+        Позволяет узнать имя фабрики. В данном случае это "user"
+        :return: строковое значение имени фабрики
+        """
         return "user"
 
 
 # AbstractRepository start
 class AbstractRepository(ABC):
+    """
+    Абстрактный репозиторий для работы с сущностями Entity
+    """
 
     @abstractmethod
     def get(self, reference) -> Entity:
@@ -86,8 +114,8 @@ class AbstractRepository(ABC):
 class RepositoryRAM(AbstractRepository):
     """
     Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в оперативной памяти.
-    Он может быть подключен к классу RepositorySelector в качестве одного из дух возможных контроллеров.
-    Другая возможность - использовать контроллер RepositoryMySQL
+    Он может быть создан при помощи RepositoryCreator в качестве одного из дух возможных вариантов.
+    Другая возможность - использовать репозиторий RepositoryMySQL
     """
 
     def __init__(self, options: dict, fact: AbstractFactory):
@@ -95,10 +123,11 @@ class RepositoryRAM(AbstractRepository):
         Простая инициализация
         Формат базы: список словарей с данными пользователей
         :param options: словарь параметров. В данном контроллере не используется. Нет необходимости
+        :param fact: фабрика. Используется при необходимости создать сущность User, возвращаемую из репозитория
         """
         self.__options = options  # Сохраняются параметры, переданные в конструктор
+        self.__factory = fact  # Сохраняется фабрика
         self.__db = []  # Инициализируется база пользователей.
-        self.__factory = fact
 
     def __get_index(self, user_id: int) -> int:
         """
@@ -116,7 +145,7 @@ class RepositoryRAM(AbstractRepository):
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
+        :return: если пользователь найден в базе, то возвращает сущность пользователя, иначе возвращает пустую сущность
         """
         for entity in self.__db:
             if entity.id == user_id:
@@ -126,7 +155,7 @@ class RepositoryRAM(AbstractRepository):
     def list(self) -> list[Entity]:
         """
         Возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
+        :return: если база не пуста, то возвращает список c сущностями из базы, иначе возвращает []
         """
         result = self.__db
         if len(result) != 0:
@@ -136,9 +165,8 @@ class RepositoryRAM(AbstractRepository):
     def add(self, entity: Entity) -> int:
         """
         Добавляет нового пользователя в базу
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
+        :param entity: сущность с заполненными параметрами
+        :return: если сущность с таким id не существует, то возвращает 0, иначе возвращает -1
         """
         if self.__get_index(entity.id) == -1:
             self.__db.append(entity)
@@ -149,7 +177,7 @@ class RepositoryRAM(AbstractRepository):
         """
         Удаляет одного пользователя из базы
         :param user_id: целочисленное значение id пользователя
-        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
+        :return: если сущность с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
         i = self.__get_index(user_id)
         if i != -1:
@@ -160,9 +188,8 @@ class RepositoryRAM(AbstractRepository):
     def update(self, entity: Entity) -> int:
         """
         Обновляет данные пользователя в соответствии с переданными параметрами
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
+        :param entity: сущность с заполненными параметрами
+        :return: если сущность с таким id существует, то возвращает 0, иначе возвращает -1
         """
         i = self.__get_index(entity.id)
         if i != -1:
@@ -175,16 +202,16 @@ class RepositoryMySQL(AbstractRepository):
     """
     Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в базе данных.
     Работает с базами MySQL. Используется доступ по логину и паролю
-    Он может быть подключен к классу RepositorySelector в качестве одного из дух возможных контроллеров.
+    Он может быть создан при помощи RepositoryCreator в качестве одного из дух возможных вариантов.
     Другая возможность - использовать контроллер RepositoryRAM.
     """
 
     def __init__(self, options: dict, fact: AbstractFactory):
         """
         Простая инициализация
-        :param factory:
         :param options: словарь параметров. Загружается из файла. Для данного контроллера используются параметры
             username, password
+        :param fact: фабрика. Используется при необходимости создать сущность User, возвращаемую из репозитория
         """
         self.__options = options
         self.__init_db()
@@ -254,7 +281,7 @@ class RepositoryMySQL(AbstractRepository):
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
-        :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
+        :return: если пользователь найден в базе, то возвращает сущность пользователя, иначе возвращает пустую сущность
         """
         result = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
         if len(result) == 0:
@@ -262,10 +289,10 @@ class RepositoryMySQL(AbstractRepository):
         entity = result[0]
         return self.__factory.create(entity["id"], {"title": entity["title"]})
 
-    def list(self) -> list:
+    def list(self) -> list[Entity]:
         """
         Возвращает всех пользователей в базе
-        :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
+        :return: если база не пуста, то возвращает список c сущностями из базы, иначе возвращает []
         """
         entities_list = self.__make_query("SELECT * FROM users")
         if len(entities_list) == 0:
@@ -278,9 +305,8 @@ class RepositoryMySQL(AbstractRepository):
     def add(self, entity: Entity) -> int:
         """
         Добавляет нового пользователя в базу
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
+        :param entity: сущность с заполненными параметрами
+        :return: если сущность с таким id не существует, то возвращает 0, иначе возвращает -1
         """
         if self.get(entity.id).id == -1:
             self.__make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
@@ -292,7 +318,7 @@ class RepositoryMySQL(AbstractRepository):
         """
         Удаляет одного пользователя из базы
         :param user_id: целочисленное значение id пользователя
-        :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
+        :return: если сущность с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
         """
         if self.get(user_id).id != -1:
             self.__make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
@@ -302,68 +328,14 @@ class RepositoryMySQL(AbstractRepository):
     def update(self, entity: Entity) -> int:
         """
         Обновляет данные пользователя в соответствии с переданными параметрами
-        :param user_id: целочисленное значение id пользователя
-        :param title: строковое значение ФИО пользователя
-        :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
+        :param entity: сущность с заполненными параметрами
+        :return: если сущность с таким id существует, то возвращает 0, иначе возвращает -1
         """
         if self.get(entity.id).id != -1:
             self.__make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
                               user_id=entity.id, title=entity.properties["title"])
             return 0
         return -1
-
-#
-# class InterfaceRepository:
-#     def __init__(self, fact: AbstractFactory):
-#         self.factory = fact
-#         self.__repository = RepositoryCreator().create()
-#
-#     def get(self, user_id: int) -> dict:
-#         """
-#         Передаёт управление контроллеру, а тот возвращает одного пользователя по id
-#         :param user_id: целочисленное значение id пользователя
-#         :return: если пользователь найден в базе, то возвращает словарь с данными пользователя, иначе возвращает {}
-#         """
-#         result = self.__repository.get(user_id)
-#         return result
-#
-#     def list(self) -> list[dict]:
-#         """
-#         Передаёт управление контроллеру, а тот возвращает всех пользователей в базе
-#         :return: если база не пуста, то возвращает список словарей с данными пользователей, иначе возвращает []
-#         """
-#         result = self.__repository.list()
-#         return result
-#
-#     def add(self, entity: Entity) -> int:
-#         """
-#         Передаёт управление контроллеру, а тот добавляет нового пользователя в базу
-#         :param user_id: целочисленное значение id пользователя
-#         :param title: строковое значение ФИО пользователя
-#         :return: если пользователь с таким id не существует, то возвращает 0, иначе возвращает -1
-#         """
-#
-#         result = self.__repository.add(entity)
-#         return result
-#
-#     def delete(self, user_id: int) -> int:
-#         """
-#         Передаёт управление контроллеру, а тот удаляет одного пользователя из базы
-#         :param user_id: целочисленное значение id пользователя
-#         :return: если пользователь с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
-#         """
-#         result = self.__repository.delete(user_id)
-#         return result
-#
-#     def update(self, entity: Entity) -> int:
-#         """
-#         Передаёт управление контроллеру, а тот обновляет данные пользователя в соответствии с переданными параметрами
-#         :param user_id: целочисленное значение id пользователя
-#         :param title: строковое значение ФИО пользователя
-#         :return: если пользователь с таким id существует, то возвращает 0, иначе возвращает -1
-#         """
-#         result = self.__repository.update(entity)
-#         return result
 
 
 class AbstractRepositoryCreator(ABC):
@@ -383,9 +355,7 @@ class RepositoryCreator(AbstractRepositoryCreator):
     def __init__(self, fact: AbstractFactory):
         """
         Простая инициализация
-        :param factory:
-        :param options: словарь параметров. Загружается из файла. Для данного контроллера используются параметры
-            username, password
+        :param fact: фабрика. Передаётся создаваемому репозиторию
         """
         self.factory = fact
 
@@ -431,11 +401,20 @@ class RepositoryCreator(AbstractRepositoryCreator):
         return options
 
     def create(self) -> AbstractRepository:
+        """
+        Выбирает метод получения настроек для создания репозитория. Один реализованный метод - из файла.
+        Использует вспомогательный метод __select_from_file() для выбора типа репозитория
+        :return: созданный репозиторий
+        """
         if REPOSITORY_CREATION_METHOD == "from-file":
             self.__select_from_file()
         return self.__repository
 
     def __select_from_file(self) -> None:
+        """
+        Вспомогательный метод для выбора типа репозитория в соответствии с настройками из файла
+        :return: сохраняет репозиторий в переменной экземпляра
+        """
         self.__options = self.__get_options()
         if self.__options["use_db_repo"]:
             self.__repository = RepositoryMySQL(self.__options, self.factory)
@@ -443,116 +422,9 @@ class RepositoryCreator(AbstractRepositoryCreator):
             self.__repository = RepositoryRAM(self.__options, self.factory)
 
 
-# Sample Factory start
-
-class Creator(ABC):
-    """
-    Класс Создатель объявляет фабричный метод, который должен возвращать объект
-    класса Продукт. Подклассы Создателя обычно предоставляют реализацию этого
-    метода.
-    """
-
-    @abstractmethod
-    def factory_method(self):
-        """
-        Обратите внимание, что Создатель может также обеспечить реализацию
-        фабричного метода по умолчанию.
-        """
-        pass
-
-    def some_operation(self) -> str:
-        """
-        Также заметьте, что, несмотря на название, основная обязанность
-        Создателя не заключается в создании продуктов. Обычно он содержит
-        некоторую базовую бизнес-логику, которая основана на объектах Продуктов,
-        возвращаемых фабричным методом. Подклассы могут косвенно изменять эту
-        бизнес-логику, переопределяя фабричный метод и возвращая из него другой
-        тип продукта.
-        """
-
-        # Вызываем фабричный метод, чтобы получить объект-продукт.
-        product = self.factory_method()
-
-        # Далее, работаем с этим продуктом.
-        result = f"Creator: The same creator's code has just worked with {product.operation()}"
-
-        return result
-
-
-"""
-Конкретные Создатели переопределяют фабричный метод для того, чтобы изменить тип
-результирующего продукта.
-"""
-
-
-class ConcreteCreator1(Creator):
-    """
-    Обратите внимание, что сигнатура метода по-прежнему использует тип
-    абстрактного продукта, хотя фактически из метода возвращается конкретный
-    продукт. Таким образом, Создатель может оставаться независимым от конкретных
-    классов продуктов.
-    """
-
-    def factory_method(self) -> Product:
-        return ConcreteProduct1()
-
-
-class ConcreteCreator2(Creator):
-    def factory_method(self) -> Product:
-        return ConcreteProduct2()
-
-
-class Product(ABC):
-    """
-    Интерфейс Продукта объявляет операции, которые должны выполнять все
-    конкретные продукты.
-    """
-
-    @abstractmethod
-    def operation(self) -> str:
-        pass
-
-
-"""
-Конкретные Продукты предоставляют различные реализации интерфейса Продукта.
-"""
-
-
-class ConcreteProduct1(Product):
-    def operation(self) -> str:
-        return "{Result of the ConcreteProduct1}"
-
-
-class ConcreteProduct2(Product):
-    def operation(self) -> str:
-        return "{Result of the ConcreteProduct2}"
-
-
-def client_code(creator: Creator) -> None:
-    """
-    Клиентский код работает с экземпляром конкретного создателя, хотя и через
-    его базовый интерфейс. Пока клиент продолжает работать с создателем через
-    базовый интерфейс, вы можете передать ему любой подкласс создателя.
-    """
-
-    print(f"Client: I'm not aware of the creator's class, but it still works.\n"
-          f"{creator.some_operation()}", end="")
-
-
-if __name__ == "__main__":
-    print("App: Launched with the ConcreteCreator1.")
-    client_code(ConcreteCreator1())
-    print("\n")
-
-    print("App: Launched with the ConcreteCreator2.")
-    client_code(ConcreteCreator2())
-
-# Factory end
-
-
 """
 Начало работы REST API сервиса
-Небольшие приложения Flask принято разрабатывать в процедурном подходе
+Приложения Flask принято разрабатывать в процедурном подходе
 """
 app = Flask(__name__)  # инициализация объекта, с которым сможет работать WSGI сервер
 app.config['SECRET_KEY'] = 'gh5ng843bh68hfi4nfc6h3ndh4xc53b56lk89gm4bf2gc6ehm'  # произвольная случайная длинная строка
