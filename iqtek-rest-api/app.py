@@ -12,7 +12,7 @@ from myrepository import *
 app = Flask(__name__)  # инициализация объекта, с которым сможет работать WSGI сервер
 app.config['SECRET_KEY'] = 'gh5ng843bh68hfi4nfc6h3ndh4xc53b56lk89gm4bf2gc6ehm'  # произвольная случайная длинная строка
 factory = UserFactory()  # инициализация фабрики сущностей пользователей
-repo = RepositoryCreator(factory).create()  # инициализация репозитория
+repo = RepositoryCreator.create(factory)  # инициализация репозитория
 
 
 @app.route('/user/<int:user_id>', methods=['GET'])

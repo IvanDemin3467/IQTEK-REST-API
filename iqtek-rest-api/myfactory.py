@@ -94,6 +94,15 @@ class AbstractFactory(ABC):
     """
     __empty_entity: Entity
 
+    @property
+    @abstractmethod
+    def empty_entity(self) -> Entity:
+        """
+        Дескриптор, который делает классовое свойство empty_entity приватным (readonly)
+        :return: возвращает содержимое __empty_entity
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def create(self, entity_id: int, properties: dict) -> Entity:
         raise NotImplementedError
