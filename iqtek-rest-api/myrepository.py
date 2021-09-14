@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from mysql.connector import connect, Error
-import json
+import json  # to read options from file
+import sys  # for repository factory (it creates class by name (string))
 
 from myfactory import *
 
 
 OPTIONS_FILE_PATH = "options.json"
 DB_NAME = "sample_database"
-REPOSITORY_CREATION_METHOD = "from-file"
 
 
 # Repository start
@@ -41,7 +41,7 @@ class AbstractRepository(ABC):
 
 class RepositoryRAM(AbstractRepository):
     """
-    Этот класс обеспечивает взаимодействие с репозиторием, хранящимся в оперативной памяти.
+    Это конкретная реализация репозитория для хранения сущностей Entity в оперативной памяти.
     Он может быть создан при помощи RepositoryCreator в качестве одного из дух возможных вариантов.
     Другая возможность - использовать репозиторий RepositoryMySQL
     """
@@ -51,10 +51,10 @@ class RepositoryRAM(AbstractRepository):
         Простая инициализация
         Формат репозитория: список сущностей Entity
         :param options: словарь параметров. В данном контроллере не используется. Нет необходимости
-        :param fact: фабрика. Используется при необходимости создать сущность User, возвращаемую из репозитория
+        :param fact: фабрика. Используется при необходимости создать сущность Entity, возвращаемую из репозитория
         """
         self.__options = options  # Сохраняются параметры, переданные в конструктор
-        self.__factory = fact  # Сохраняется фабрика
+        self.__factory = fact  # Сохраняется фабрика сущностей
         self.__db = []  # Инициализируется база пользователей.
 
     def __get_index(self, user_id: int) -> int:
@@ -129,7 +129,7 @@ class RepositoryRAM(AbstractRepository):
 
 class RepositoryMySQL(AbstractRepository):
     """
-    Этот класс обеспечивает хранений сущностей Entity в базе данных MySQL.
+    Это конкретная реализация репозитория для хранения сущностей Entity в базе данных MySQL.
     Используется доступ по логину и паролю
     Класс может быть создан при помощи фабрики RepositoryCreator в качестве одного из дух возможных вариантов.
     Другая возможность - использовать репозиторий RepositoryRAM.
@@ -277,7 +277,7 @@ class AbstractRepositoryCreator(ABC):
 
 class RepositoryCreator(AbstractRepositoryCreator):
     """
-    Это класс-фабрика. Он возвращает в качестве репозитория один из двух вариантов:
+    Это класс-фабрика репозиториев. Он возвращает в качестве репозитория один из двух инстансов:
         RepositoryMySQL для хранения записей пользователей в MySQL базе данных или
         RepositoryRAM для хранения записей пользователей в оперативной памяти.
     Также класс умеет загружать настройки программы из файла при помощи метода __get_options()
@@ -289,7 +289,9 @@ class RepositoryCreator(AbstractRepositoryCreator):
         Вспомогательный статический метод.
         Считывает настройки программы из файла OPTIONS_FILE_PATH.
         :return: словарь с настройками
-            use_db_repo: принимает значение True, если сущности хранятся в MySQL базе, иначе False
+            repo_type: содержит имя класса, который будет создаваться этой фабрикой репозиториев. Возможные значения:
+                RepositoryMySQL - хранит сущности в базе MySQL
+                RepositoryRAM - хранит сущности в оперативной памяти
             username: логин для доступа к базе
             password: пароль для доступа к базе
         """
@@ -304,40 +306,24 @@ class RepositoryCreator(AbstractRepositoryCreator):
             print("Got exception while reading options from file")
             return options
 
-        options["use_db_repo"] = True if json_object['use_db_repo'] == "True" else False
-        options["username"] = json_object['username']
-        options["password"] = json_object['password']
-        print(options)
+        try:
+            options["repo_type"] = json_object['repo_type']
+            options["username"] = json_object['username']
+            options["password"] = json_object['password']
+        except KeyError:
+            print(f"The file {OPTIONS_FILE_PATH} is not formatted correctly")
 
         return options
 
     @classmethod
     def create(cls, fact: AbstractFactory) -> AbstractRepository:
         """
-        Выбирает метод получения настроек для создания репозитория. Один реализованный метод - из файла.
-        Использует вспомогательный метод __select_from_file() для выбора типа репозитория
-        :param fact: фабрика сущностей; передаётся репозиторию
-        :return: созданный репозиторий
-        """
-        if REPOSITORY_CREATION_METHOD == "from-file":
-            options = cls.__get_options()
-            repository = cls.__select_from_file(options, fact)
-        else:
-            repository = AbstractRepository()
-        return repository
-
-    @classmethod
-    def __select_from_file(cls, options: dict, fact: AbstractFactory) -> AbstractRepository:
-        """
-        Вспомогательный метод для выбора типа репозитория в соответствии с настройками из файла
-        :param options: словарь настроек для репозитория
+        Выбирает тип используемого репозитория в зависимости от параметра repo_type, полученного из файла
         :param fact: фабрика сущностей; передаётся репозиторию
         :return: инстанс выбранного репозитория
         """
-        if options["use_db_repo"]:
-            repository = RepositoryMySQL(options, fact)
-            print("Working with RepositoryMySQL")
-        else:
-            repository = RepositoryRAM(options, fact)
-            print("Working with RepositoryRAM")
+        options = cls.__get_options()
+        repository_class = getattr(sys.modules[__name__], options["repo_type"])
+        repository = repository_class(options, fact)
+        print("Working with", repository)
         return repository
