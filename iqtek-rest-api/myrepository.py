@@ -77,7 +77,7 @@ class RepositoryRAM(AbstractRepository):
         for entity in self.__db:
             if entity.id == user_id:
                 return entity
-        return self.__factory.create_empty()
+        return self.__factory.empty_entity
 
     def list(self) -> list[Entity]:
         """
@@ -212,7 +212,7 @@ class RepositoryMySQL(AbstractRepository):
         """
         result = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
         if len(result) == 0:
-            return self.__factory.create_empty()
+            return self.__factory.empty_entity
         entity = result[0]
         return self.__factory.create(entity["id"], {"title": entity["title"]})
 

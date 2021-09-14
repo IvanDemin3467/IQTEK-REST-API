@@ -25,10 +25,10 @@ def get_user(user_id: int) -> (str, int):
              иначе возвращает код 404
              Формат возвращаемого значения: {"id": user_id, "title": title}
     """
-    user = repo.get(user_id)
-    if user.id == -1:
+    entity = repo.get(user_id)
+    if entity == factory.empty_entity:
         return "Rejected. No user with id=" + str(user_id), 404
-    return jsonify(user.get_dict()), 200
+    return jsonify(entity.get_dict()), 200
 
 
 @app.route('/user', methods=['GET'])
@@ -60,8 +60,8 @@ def add_user(user_id: int) -> (str, int):
              иначе создаёт и возвращает код 204
     """
     title = request.args.get('title')
-    user = factory.create(user_id, {'title': title})
-    if repo.add(user) == -1:
+    entity = factory.create(user_id, {'title': title})
+    if repo.add(entity) == -1:
         return "Rejected. User with id=" + str(user_id) + " already exists", 422
     return 'Success. User created', 204
 
@@ -91,8 +91,8 @@ def upd_user(user_id: int) -> (str, int):
              иначе изменяет его данные и возвращает код 204
     """
     title = request.args.get('title')
-    user = factory.create(user_id, {'title': title})
-    result = repo.update(user)
+    entity = factory.create(user_id, {'title': title})
+    result = repo.update(entity)
     if result == -1:
         return "Rejected. No user with id=" + str(user_id), 404
     return 'Success. User updated', 204
