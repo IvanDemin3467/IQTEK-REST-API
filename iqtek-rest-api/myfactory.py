@@ -45,13 +45,15 @@ class DictChecker:
 class Entity(ABC):
     """
     Абстрактная сущность, от которой будут наследоваться конкретные сущности, такие как User
-    Сущности будут создавать фабрикой. Храниться они будут в репозитории
-    Entity предлагает конструктор по умолчанию, в котором сохраняются id сущности и словарь её параметров
+        Сущности будут создаваться фабрикой AbstractFactory. Храниться они будут в репозитории AbstractRepository
+    Определяет конструктор по умолчанию, в котором сохраняются id сущности и словарь её параметров
     Метод get_dict() должен возвращать словарь, в котором записаны все параметры сущности, включая и её id.
-    Он нужен, чтобы возвращать представление сущности через jsonify().
+        Он нужен, чтобы возвращать представление сущности через jsonify()
+    Добавлена небольшая оптимизация при помощи __slots__. Расход памяти должен уменьшиться
     """
-    id = TypeChecker("id", int)
-    properties = TypeChecker("properties", dict)
+    __slots__ = ['id', 'properties']
+    id_checker = TypeChecker("id", int)
+    properties_checker = TypeChecker("properties", dict)
 
     def __init__(self, entity_id: int, properties: dict) -> None:
         self.id = entity_id
@@ -195,6 +197,14 @@ if __name__ == "__main__":
 
     print("\nВсе параметры переданы верно")
     user = factory.create(1, {"title": "des"})
+    print(user.get_dict())
+
+    """
+    Тест __slots__
+    """
+
+    print("\nПопытка установки свойства инстанса, не входящего в __slots__. Не должно ничего измениться")
+    user.property = "sample-property"
     print(user.get_dict())
 
     """
