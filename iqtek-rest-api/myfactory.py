@@ -68,6 +68,7 @@ class User(Entity):
     """
     Конкретный класс, реализующий абстракцию Entity. Предназначен для хранения id и ФИО пользователей в репозитории
     """
+    id = TypeChecker("id", int)
     properties = DictChecker("properties", "title")
 
     def __init__(self, user_id: int, properties: dict) -> None:
