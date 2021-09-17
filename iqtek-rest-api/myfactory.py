@@ -186,19 +186,27 @@ if __name__ == "__main__":
     factory = UserFactory()
     print("ID строковый вместо целочисленного")
     user = factory.create("1", {"title": "des"})
-    print(user.get_dict())
+    result = user.get_dict()
+    print(result)
+    assert result == {'id': -1, 'title': ''}
 
     print("\nПередан список свойств вместо словаря")
     user = factory.create(1, ["title", "des"])
-    print(user.get_dict())
+    result = user.get_dict()
+    print(result)
+    assert result == {'id': -1, 'title': ''}
 
     print("\nПередан словарь с отсутствующим ключом 'title'")
     user = factory.create(1, {"tit": "des"})
-    print(user.get_dict())
+    result = user.get_dict()
+    print(result)
+    assert result == {'id': -1, 'title': ''}
 
     print("\nВсе параметры переданы верно")
     user = factory.create(1, {"title": "des"})
-    print(user.get_dict())
+    result = user.get_dict()
+    print(result)
+    assert result == {'id': 1, 'title': 'des'}
 
     """
     Тест __slots__
@@ -206,7 +214,9 @@ if __name__ == "__main__":
 
     print("\nПопытка установки свойства инстанса, не входящего в __slots__. Не должно ничего измениться")
     user.property = "sample-property"
-    print(user.get_dict())
+    result = user.get_dict()
+    print(result)
+    assert result == {'id': 1, 'title': 'des'}
 
     """
     Тест приватности свойства empty_entity
@@ -214,7 +224,9 @@ if __name__ == "__main__":
 
     print("\nПолучение empty_entity")
     empty = factory.empty_entity
-    print(empty.get_dict())
+    result = user.get_dict()
+    print(result)
+    assert result == {'id': 1, 'title': 'des'}
 
     print("\nУстановка непустого значения empty_entity и повторный запрос на получение")
     try:
@@ -222,13 +234,16 @@ if __name__ == "__main__":
     except AttributeError as e:
         print(e)
     empty = factory.empty_entity
-    print(empty.get_dict())
+    result = empty.get_dict()
+    print(result)
+    assert result == {'id': -1, 'title': ''}
 
     print("\nПопытка непосредственного обращения к приватному свойству")
     try:
         empty = factory.__empty_entity
         print(empty.get_dict())
     except AttributeError as e:
+        assert str(e) == "'UserFactory' object has no attribute '__empty_entity'"
         print(e)
 
     print("\nПопытка непосредственного изменения приватного свойства приводит к созданию runtime приватного свойства")
@@ -237,6 +252,8 @@ if __name__ == "__main__":
         factory.__empty_entity = user
         empty = factory.__empty_entity
         print(empty.get_dict())
-        print(factory.empty_entity.get_dict())
+        result = factory.empty_entity.get_dict()
+        print(result)
+        assert result == {'id': -1, 'title': ''}
     except AttributeError as e:
         print(e)
