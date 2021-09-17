@@ -77,4 +77,4 @@ mysql-connector-python==8.0.26
 
 /iqtek-rest-api/myrepository.py - Реализация шаблона репозитория
 
-/iqtek-rest-api/test/myfactory.py - Примеры тестов для проверки работоспособности сервиса
+/iqtek-rest-api/test/tests.py - Примеры тестов для проверки работоспособности сервиса
