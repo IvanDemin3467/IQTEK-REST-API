@@ -55,6 +55,7 @@ if __name__ == '__main__':
     tester.sample_test("Получить все записи", 'user', get, 200)
 
     tester.sample_test("Получить одну запись с id=2", 'user/2', get, 200)
+    tester.sample_test("Получить одну запись с id=2", 'user/2', get, 200)  # Тест кеша
 
     tester.sample_test("Создать пользователя с именем '; DROP TABLE IF EXISTS users; --",
                        "user/3?title=%27%3B+DROP+TABLE+IF+EXISTS+users%3B+--", post, 204)  # SQL injection

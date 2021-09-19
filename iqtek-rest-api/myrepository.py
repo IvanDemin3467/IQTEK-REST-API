@@ -10,6 +10,39 @@ import time
 
 from myfactory import *
 
+redis = StrictRedis()
+
+
+def cached(func):
+    """
+    Decorator that caches the results of the function call.
+
+    We use Redis in this example, but any cache (e.g. memcached) will work.
+    We also assume that the result of the function can be serialized as JSON,
+    which obviously will be untrue in many situations. Tweak as needed.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Generate the cache key from the function's arguments.
+        key_parts = [func.__name__] + list(args)
+        key = '-'.join(key_parts)
+        from_cache = redis.get(key)
+
+        if from_cache is None:
+            # Run the function and cache the result for next time.
+            value = func(*args, **kwargs)
+            value_json = json.dumps(value)
+            redis.set(key, value_json)
+        else:
+            # Skip the function entirely and use the cached value instead.
+            value_json = from_cache.decode('utf-8')
+            value = json.loads(value_json)
+
+        return value
+
+    return wrapper
+
 
 def measure_time(func):
     def inner(*args, **kwargs):
@@ -175,9 +208,10 @@ class RepositoryMySQL(AbstractRepository):
         :param options: словарь параметров. Для данного репозитория используются параметры username, password
         :param fact: фабрика сущностей. Используется при необходимости создать сущность, возвращаемую из репозитория
         """
-        self.__options = options
-        self.__init_db()
-        self.__factory = fact
+        self.__options = options  # Сохранить настройки
+        self.__init_db()  # Инициализировать базу данных
+        self.__factory = fact  # Сохранить фабрику сущностей
+        self._cache = {}  # Инициализировать простой кэш
 
     def __get_db_connection(self) -> connect:
         """
@@ -238,14 +272,28 @@ class RepositoryMySQL(AbstractRepository):
                            title VARCHAR(255) NOT NULL);""")
         return 0
 
+    def __clear_cache(self) -> None:
+        """
+        Clears cache. Use it on every DB-changing operation
+        :return: None
+        """
+        self._cache = {}
+
     @measure_time
     def get(self, user_id: int) -> Entity:
         """
-        Возвращает одного пользователя по id
+        Возвращает одного пользователя по id.
+        Использует простой кэш на словаре.
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь найден в базе, то возвращает сущность пользователя, иначе возвращает пустую сущность
         """
-        results = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
+        key = ("get", user_id)
+        if key in self._cache:
+            results = self._cache[key]
+        else:
+            results = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
+            self._cache[key] = results
+
         if len(results) == 0:
             return self.__factory.empty_entity
         entity = results[0]
@@ -275,6 +323,7 @@ class RepositoryMySQL(AbstractRepository):
         if self.get(entity.id).id == -1:
             self.__make_query("INSERT INTO users (id, title) VALUES (%(user_id)s, %(title)s);",
                               user_id=entity.id, title=entity.properties["title"])
+            self.__clear_cache()
             return 0
         return -1
 
@@ -287,6 +336,7 @@ class RepositoryMySQL(AbstractRepository):
         """
         if self.get(user_id).id != -1:
             self.__make_query("DELETE FROM users WHERE id = %(user_id)s;", user_id=user_id)
+            self.__clear_cache()
             return 0
         return -1
 
@@ -300,6 +350,7 @@ class RepositoryMySQL(AbstractRepository):
         if self.get(entity.id).id != -1:
             self.__make_query("UPDATE users SET title = %(title)s WHERE id = %(user_id)s",
                               user_id=entity.id, title=entity.properties["title"])
+            self.__clear_cache()
             return 0
         return -1
 
