@@ -3,8 +3,37 @@ from __future__ import annotations
 from mysql.connector import connect, Error
 import json  # to read options from file
 import sys  # for repository factory (it creates class by name (string))
+from functools import wraps
+from redis import StrictRedis
+
+import time
 
 from myfactory import *
+
+
+def measure_time(func):
+    def inner(*args, **kwargs):
+        start_time = time.time()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            ex_time = time.time() - start_time
+            print(f'Execution time: {ex_time:.2f} seconds')
+    return inner
+
+
+def memoize(func):
+    _cache = {}
+
+    def wrapper(*args, **kwargs):
+        name = func.__name__
+        key = (name, args, frozenset(kwargs.items()))
+        if key in _cache:
+            return _cache[key]
+        response = func(*args, **kwargs)
+        _cache[key] = response
+        return response
+    return wrapper
 
 
 OPTIONS_FILE_PATH = "options.json"
@@ -69,6 +98,7 @@ class RepositoryRAM(AbstractRepository):
                 return i
         return -1
 
+    @measure_time
     def get(self, user_id: int) -> Entity:
         """
         Возвращает из репозитория одну сущность по переданному id
@@ -81,16 +111,18 @@ class RepositoryRAM(AbstractRepository):
                 return entity
         return self.__factory.empty_entity
 
+    @measure_time
     def list(self) -> list[Entity]:
         """
         Возвращает все сущности из репозитория
         :return: если репозиторий не пустой, то возвращает список c сущностями из него, иначе возвращает []
         """
-        result = self.__db
-        if len(result) != 0:
-            return result
+        results = self.__db
+        if len(results) != 0:
+            return results
         return []
 
+    @measure_time
     def add(self, entity: Entity) -> int:
         """
         Добавляет новую сущность в репозиторий
@@ -102,6 +134,7 @@ class RepositoryRAM(AbstractRepository):
             return 0
         return -1
 
+    @measure_time
     def delete(self, user_id: int) -> int:
         """
         Удаляет одну сущность из репозитория
@@ -114,6 +147,7 @@ class RepositoryRAM(AbstractRepository):
             return 0
         return -1
 
+    @measure_time
     def update(self, entity: Entity) -> int:
         """
         Обновляет данные сущности в репозитории в соответствии с переданными параметрами
@@ -179,11 +213,11 @@ class RepositoryMySQL(AbstractRepository):
             conn = self.__get_db_connection()  # Создать подключение
             with conn.cursor(dictionary=True) as cursor:  # параметр dictionary указывает, что курсор возвращает словари
                 cursor.execute(query, {'user_id': user_id, 'title': title})  # выполнить запрос безопасным образом
-                result = cursor.fetchall()  # получить результаты выполнения
+                results = cursor.fetchall()  # получить результаты выполнения
                 cursor.close()  # вручную закрыть курсор
             conn.commit()  # вручную указать, что транзакции завершены
             conn.close()  # вручную закрыть соединение
-            return result
+            return results
         except Error as err:
             print(f"Error with db: {err}")
             return []
@@ -204,18 +238,20 @@ class RepositoryMySQL(AbstractRepository):
                            title VARCHAR(255) NOT NULL);""")
         return 0
 
+    @measure_time
     def get(self, user_id: int) -> Entity:
         """
         Возвращает одного пользователя по id
         :param user_id: целочисленное значение id пользователя
         :return: если пользователь найден в базе, то возвращает сущность пользователя, иначе возвращает пустую сущность
         """
-        result = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
-        if len(result) == 0:
+        results = self.__make_query("SELECT * FROM users WHERE id = %(user_id)s", user_id=user_id)
+        if len(results) == 0:
             return self.__factory.empty_entity
-        entity = result[0]
+        entity = results[0]
         return self.__factory.create(entity["id"], {"title": entity["title"]})
 
+    @measure_time
     def list(self) -> list[Entity]:
         """
         Возвращает всех пользователей в базе
@@ -224,11 +260,12 @@ class RepositoryMySQL(AbstractRepository):
         entities_list = self.__make_query("SELECT * FROM users")
         if len(entities_list) == 0:
             return []
-        result = []
+        results = []
         for entity in entities_list:
-            result.append(self.__factory.create(entity["id"], {"title": entity["title"]}))
-        return result
+            results.append(self.__factory.create(entity["id"], {"title": entity["title"]}))
+        return results
 
+    @measure_time
     def add(self, entity: Entity) -> int:
         """
         Добавляет новую сущность в репозиторий
@@ -241,6 +278,7 @@ class RepositoryMySQL(AbstractRepository):
             return 0
         return -1
 
+    @measure_time
     def delete(self, user_id: int) -> int:
         """
         Удаляет одну сущность из репозитория по id
@@ -252,6 +290,7 @@ class RepositoryMySQL(AbstractRepository):
             return 0
         return -1
 
+    @measure_time
     def update(self, entity: Entity) -> int:
         """
         Обновляет хранимую сущность в соответствии с переданным параметром
