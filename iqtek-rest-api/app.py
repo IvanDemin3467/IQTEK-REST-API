@@ -102,4 +102,25 @@ if __name__ == '__main__':
     Тестовый запуск сервиса. Активируется только при непосредственном запуске приложения.
     При запуске через WSGI-сервер этот блок игнорируется
     """
+    """entity = factory.create(1, {'title': "qwe"})
+    repo.add(entity)
+    print(repo.get(1).get_dict())
+    entity = factory.create(3, {'title': "rty"})
+    repo.add(entity)
+    print(repo.get(3).get_dict())
+
+    entities_list = repo.list()
+    result = []
+    for entity in entities_list:
+        result.append(entity.get_dict())
+    print(result)
+
+    entity = factory.create(3, {'title': "123"})
+    repo.update(entity)
+    entities_list = repo.list()
+    result = []
+    for entity in entities_list:
+        result.append(entity.get_dict())
+    print(result)"""
+
     app.run(host="127.0.0.1", port=80)

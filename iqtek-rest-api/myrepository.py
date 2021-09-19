@@ -3,45 +3,10 @@ from __future__ import annotations
 from mysql.connector import connect, Error
 import json  # to read options from file
 import sys  # for repository factory (it creates class by name (string))
-from functools import wraps
-from redis import StrictRedis
 
 import time
 
 from myfactory import *
-
-redis = StrictRedis()
-
-
-def cached(func):
-    """
-    Decorator that caches the results of the function call.
-
-    We use Redis in this example, but any cache (e.g. memcached) will work.
-    We also assume that the result of the function can be serialized as JSON,
-    which obviously will be untrue in many situations. Tweak as needed.
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        # Generate the cache key from the function's arguments.
-        key_parts = [func.__name__] + list(args)
-        key = '-'.join(key_parts)
-        from_cache = redis.get(key)
-
-        if from_cache is None:
-            # Run the function and cache the result for next time.
-            value = func(*args, **kwargs)
-            value_json = json.dumps(value)
-            redis.set(key, value_json)
-        else:
-            # Skip the function entirely and use the cached value instead.
-            value_json = from_cache.decode('utf-8')
-            value = json.loads(value_json)
-
-        return value
-
-    return wrapper
 
 
 def measure_time(func):
@@ -99,6 +64,119 @@ class AbstractRepository(ABC):
     @abstractmethod
     def update(self, reference) -> int:
         raise NotImplementedError
+
+
+class RepositoryBytearray(AbstractRepository):
+    """
+    Это конкретная реализация репозитория для хранения сущностей Entity в массиве байтов.
+    Работает быстрее, чем repositoryRAM, так как сложность чтения О(1)
+    Но есть ограничения:
+        фиксированная длина записи
+        сложнее удалять записи из репозитория
+    Он может быть создан при помощи RepositoryCreator в качестве одного из возможных вариантов.
+    """
+    __id_length = 2
+    __title_length = 40
+    __entry_length = __title_length
+    __db_length = 4
+
+    def __init__(self, options: dict, fact: AbstractFactory):
+        """
+        Простая инициализация
+        Формат репозитория: bytearray
+        :param options: словарь параметров. В данном контроллере не используется. Нет необходимости
+        :param fact: фабрика. Используется при необходимости создать сущность Entity, возвращаемую из репозитория
+        """
+        self.__options = options  # Сохраняются параметры, переданные в конструктор
+        self.__factory = fact  # Сохраняется фабрика сущностей
+        self.__db = bytearray(self.__title_length * self.__db_length)  # Инициализируется база пользователей.
+
+    def __get_address(self, user_id: int) -> tuple[int, int]:
+        """
+        Вспомогательная функция.Преобразует ID сущности в начальный и конечный адрес в репозитории
+        :param user_id: user_id: целочисленное значение id сущности
+        :return: кортеж, состоящий из первого и конечного адресов в репозитории
+        """
+        first_byte = (user_id - 1) * self.__entry_length
+        last_byte = first_byte + self.__entry_length
+        return first_byte, last_byte
+
+    @measure_time
+    def get(self, user_id: int) -> Entity:
+        """
+        Возвращает из репозитория одну сущность по переданному id
+        :param user_id: целочисленное значение id сущности
+        :return: если сущность найдена в репозитории, то возвращает сущность,
+            иначе возвращает пустую сущность
+        """
+        first_byte, last_byte = self.__get_address(user_id)
+        if self.__db[first_byte] != 0:
+            response = self.__db[first_byte:last_byte].rstrip(b"\x00").decode("utf-8")
+            return self.__factory.create(user_id, {"title": response})
+        return self.__factory.empty_entity
+
+    @measure_time
+    def list(self) -> list[Entity]:
+        """
+        Возвращает все сущности из репозитория
+        :return: если репозиторий не пустой, то возвращает список c сущностями из него, иначе возвращает []
+        """
+        results = []
+        for i in range(self.__db_length):
+            first_byte, last_byte = self.__get_address(i)
+            if self.__db[first_byte] != 0:
+                response = self.__db[first_byte:last_byte].rstrip(b"\x00").decode("utf-8")
+                results.append(self.__factory.create(i, {"title": response}))
+
+        if len(results) != 0:
+            return results
+        return []
+
+    @measure_time
+    def add(self, entity: Entity) -> int:
+        """
+        Добавляет новую сущность в репозиторий
+        :param entity: сущность с заполненными параметрами
+        :return: если сущность с таким id не существует, то возвращает 0, иначе возвращает -1
+        """
+        first_byte, last_byte = self.__get_address(entity.id)
+        title = entity.properties["title"]
+        to_db = bytearray(title, 'utf-8')
+        if self.__db[first_byte] == 0:
+            for i in range(len(to_db)):
+                self.__db[first_byte + i] = to_db[i]
+            return 0
+        return -1
+
+    @measure_time
+    def delete(self, user_id: int) -> int:
+        """
+        Удаляет одну сущность из репозитория
+        :param user_id: целочисленное значение id пользователя
+        :return: если сущность с таким id существует на момент удаления, то возвращает 0, иначе возвращает -1
+        """
+        first_byte, last_byte = self.__get_address(user_id)
+        if self.__db[first_byte] != 0:
+            for i in range(self.__entry_length):
+                self.__db[first_byte + i] = 0
+            return 0
+        return -1
+
+    @measure_time
+    def update(self, entity: Entity) -> int:
+        """
+        Обновляет данные сущности в репозитории в соответствии с переданными параметрами
+        :param entity: сущность с заполненными параметрами
+        :return: если сущность с таким id существует, то возвращает 0, иначе возвращает -1
+        """
+        first_byte, last_byte = self.__get_address(entity.id)
+        title = entity.properties["title"]
+        to_db = bytearray(title, 'utf-8')
+        if self.__db[first_byte] != 0:
+            for i in range(len(to_db)):
+                self.__db[first_byte + i] = to_db[i]
+            return 0
+        return -1
 
 
 class RepositoryRAM(AbstractRepository):
